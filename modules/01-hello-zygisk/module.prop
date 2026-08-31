@@ -1,0 +1,6 @@
+id=zygisklab_hello
+name=ZygiskLab 01 - Hello Zygisk
+version=1.0
+versionCode=1
+author=Joseph James
+description=Lab 1. Logs pid, uid, and nice_name at each Zygisk callback. Does nothing else.

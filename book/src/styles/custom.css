@@ -1,0 +1,38 @@
+:root {
+  --sl-font: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --sl-font-mono: ui-monospace, "JetBrains Mono", "SF Mono", Menlo, monospace;
+}
+
+/* Chapter verification banner. Set by the `status` frontmatter field. */
+.zl-status {
+  display: inline-block;
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  padding: 0.15rem 0.5rem;
+  border-radius: 0.25rem;
+  margin-bottom: 1rem;
+}
+.zl-status[data-status='proven'] {
+  background: var(--sl-color-green-low);
+  color: var(--sl-color-green-high);
+}
+.zl-status[data-status='unverified'] {
+  background: var(--sl-color-orange-low);
+  color: var(--sl-color-orange-high);
+}
+
+/* Companion banner rendered next to .zl-status when status !== 'proven'. */
+.zl-status-banner {
+  border: 1px solid var(--sl-color-orange);
+  padding: 0.75em 1em;
+  background-color: var(--sl-color-orange-low);
+  color: var(--sl-color-orange-high);
+  align-items: center;
+  gap: 0.75em;
+  font-size: var(--sl-text-body-sm);
+  line-height: var(--sl-line-height-headings);
+  margin-top: 0.5rem;
+  margin-bottom: 1rem;
+}

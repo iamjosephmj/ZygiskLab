@@ -1,0 +1,44 @@
+---
+// Override of Starlight's PageTitle.astro. Frontmatter `status` is the
+// single source of truth for a chapter's verification state - the badge and
+// banner below are rendered from it directly, so there is nothing to keep
+// in sync by hand. See Finding 3 in the scaffold review: previously each
+// stub also carried a hand-written <span class="zl-status"> and caution
+// admonition in its body, which could drift from the frontmatter.
+// Starlight's PAGE_TITLE_ID ('_top') isn't part of the package's public
+// export map (only ./constants.ts internally), so it's inlined here rather
+// than imported - it's used only as the skip-link anchor target.
+const PAGE_TITLE_ID = '_top';
+
+const { status } = Astro.locals.starlightRoute.entry.data;
+const label = status === 'proven' ? 'Proven' : 'Unverified';
+---
+
+<h1 id={PAGE_TITLE_ID}>{Astro.locals.starlightRoute.entry.data.title}</h1>
+
+<span class="zl-status" data-status={status}>{label}</span>
+
+{
+  status !== 'proven' && (
+    <p class="zl-status-banner sl-flex">
+      <span>
+        This chapter has not yet been run end to end on the reference rig
+        (Pixel&nbsp;6&nbsp;Pro, Android&nbsp;16, arm64, KernelSU-Next&nbsp;3.3.0,
+        Zygisk&nbsp;Next&nbsp;1.4.5). Treat the procedures here as untested
+        until this banner says otherwise.
+      </span>
+    </p>
+  )
+}
+
+<style>
+  @layer starlight.core {
+    h1 {
+      margin-top: 1rem;
+      font-size: var(--sl-text-h1);
+      line-height: var(--sl-line-height-headings);
+      font-weight: 600;
+      color: var(--sl-color-white);
+    }
+  }
+</style>

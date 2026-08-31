@@ -1,0 +1,190 @@
+[
+  {
+    "label": "Part I: Foundations",
+    "items": [
+      {
+        "label": "1. What Zygisk is, and what it is not",
+        "slug": "book/foundations/01-what-zygisk-is"
+      },
+      {
+        "label": "2. Rules of engagement",
+        "slug": "book/foundations/02-rules-of-engagement"
+      },
+      {
+        "label": "3. The rig and the toolchain",
+        "slug": "book/foundations/03-rig-and-toolchain"
+      },
+      {
+        "label": "4. Hello, Zygisk",
+        "slug": "book/foundations/04-hello-zygisk"
+      }
+    ]
+  },
+  {
+    "label": "Part II: The load stage",
+    "items": [
+      {
+        "label": "5. Anatomy of a module",
+        "slug": "book/load/05-anatomy-of-a-module"
+      },
+      {
+        "label": "6. How the loader finds you",
+        "slug": "book/load/06-how-the-loader-finds-you"
+      },
+      {
+        "label": "7. Deploying without bricking zygote",
+        "slug": "book/load/07-deploying-safely"
+      }
+    ]
+  },
+  {
+    "label": "Part III: preAppSpecialize",
+    "items": [
+      {
+        "label": "8. The specialization window",
+        "slug": "book/prespecialize/08-specialization-window"
+      },
+      {
+        "label": "9. Reading `AppSpecializeArgs`",
+        "slug": "book/prespecialize/09-reading-appspecializeargs"
+      },
+      {
+        "label": "10. `setOption` and the flags",
+        "slug": "book/prespecialize/10-setoption-and-flags"
+      },
+      {
+        "label": "11. Choosing not to run",
+        "slug": "book/prespecialize/11-choosing-not-to-run"
+      }
+    ]
+  },
+  {
+    "label": "Part IV: postAppSpecialize",
+    "items": [
+      {
+        "label": "12. What changed at the boundary",
+        "slug": "book/postspecialize/12-what-changed-at-boundary"
+      },
+      {
+        "label": "13. JNI inside a live app",
+        "slug": "book/postspecialize/13-jni-inside-a-live-app"
+      },
+      {
+        "label": "14. Hooking native symbols",
+        "slug": "book/postspecialize/14-hooking-native-symbols"
+      },
+      {
+        "label": "15. Hooking Java through ART",
+        "slug": "book/postspecialize/15-hooking-java-through-art"
+      },
+      {
+        "label": "16. Threading and timing",
+        "slug": "book/postspecialize/16-threading-and-timing"
+      }
+    ]
+  },
+  {
+    "label": "Part V: The root side",
+    "items": [
+      {
+        "label": "17. The companion process",
+        "slug": "book/companion/17-the-companion-process"
+      },
+      {
+        "label": "18. Designing the companion protocol",
+        "slug": "book/companion/18-companion-protocol"
+      },
+      {
+        "label": "19. The asymmetry of privilege",
+        "slug": "book/companion/19-asymmetry-of-privilege"
+      },
+      {
+        "label": "20. Where it breaks",
+        "slug": "book/companion/20-where-it-breaks"
+      }
+    ]
+  },
+  {
+    "label": "Part VI: Footprint and detection",
+    "items": [
+      {
+        "label": "21. Your footprint, stage by stage",
+        "slug": "book/footprint/21-your-footprint"
+      },
+      {
+        "label": "22. How an app looks for you",
+        "slug": "book/footprint/22-how-an-app-looks-for-you"
+      },
+      {
+        "label": "23. Existing answers, surveyed",
+        "slug": "book/footprint/23-existing-answers-surveyed"
+      },
+      {
+        "label": "24. A detection harness",
+        "slug": "book/footprint/24-detection-harness"
+      },
+      {
+        "label": "25. The defensive chapter",
+        "slug": "book/footprint/25-the-defensive-chapter"
+      }
+    ]
+  },
+  {
+    "label": "Appendices",
+    "items": [
+      {
+        "label": "API reference",
+        "slug": "book/appendices/a-api-reference"
+      },
+      {
+        "label": "Troubleshooting by symptom",
+        "slug": "book/appendices/b-troubleshooting"
+      },
+      {
+        "label": "Cheatsheet",
+        "slug": "book/appendices/c-cheatsheet"
+      },
+      {
+        "label": "Glossary",
+        "slug": "book/appendices/d-glossary"
+      },
+      {
+        "label": "Further reading",
+        "slug": "book/appendices/e-further-reading"
+      }
+    ]
+  },
+  {
+    "label": "Labs",
+    "items": [
+      {
+        "label": "Lab 1: Hello, Zygisk",
+        "slug": "labs/lab-01-hello-zygisk"
+      },
+      {
+        "label": "Lab 2: Deploying without bricking zygote",
+        "slug": "labs/lab-02-safe-deploy"
+      },
+      {
+        "label": "Lab 3: Choosing not to run",
+        "slug": "labs/lab-03-choosing-not-to-run"
+      },
+      {
+        "label": "Lab 4: Hooking native symbols",
+        "slug": "labs/lab-04-hooking-native-symbols"
+      },
+      {
+        "label": "Lab 5: Threading and timing",
+        "slug": "labs/lab-05-threading-and-timing"
+      },
+      {
+        "label": "Lab 6: Designing the companion protocol",
+        "slug": "labs/lab-06-companion-protocol"
+      },
+      {
+        "label": "Lab 7: A detection harness",
+        "slug": "labs/lab-07-detection-harness"
+      }
+    ]
+  }
+]

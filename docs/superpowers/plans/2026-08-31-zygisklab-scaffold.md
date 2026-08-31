@@ -15,7 +15,7 @@
 - Repository root: `~/IdeaProjects/ZygiskLab`. All paths below are relative to it.
 - Site lives in `book/`; `astro.config.mjs` must set `site: 'https://iamjosephmj.github.io'` and `base: '/ZygiskLab'`.
 - Dependencies pinned to `astro@^6.0.1`, `@astrojs/starlight@^0.38.1`, `sharp@^0.34.2`. Do not add other dependencies.
-- Reference rig, stated verbatim wherever the rig is named: **Pixel 6 Pro, Android 16, arm64, KernelSU-Next 3.3.0, Zygisk Next 1.4.5**.
+- Reference rig — wherever the rig is named, these five values appear exactly, in whatever layout suits the surrounding prose (prose, list, or table): **Pixel 6 Pro**, **Android 16**, **arm64**, **KernelSU-Next 3.3.0**, **Zygisk Next 1.4.5**. What is binding is the values, not the punctuation between them.
 - Every chapter file's frontmatter carries `status: unverified`. Nothing is set to `proven` in this plan — that flag is only ever set after the author reports an on-device result.
 - No frametap code, filenames, or references anywhere in this repository. Lessons are re-derived generically.
 - Part VI and its labs must not contain novel evasion tooling. Mechanisms and detection only.

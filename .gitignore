@@ -1,0 +1,12 @@
+node_modules/
+book/dist/
+book/.astro/
+modules/**/libs/
+modules/**/obj/
+modules/**/out/
+modules/**/*.zip
+.DS_Store
+*.local
+.gradle/
+build/
+local.properties
