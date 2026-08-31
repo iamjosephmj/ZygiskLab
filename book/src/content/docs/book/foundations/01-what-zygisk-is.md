@@ -110,8 +110,9 @@ this sentence.
 
 Zygisk arranges for a provider-supplied component to be present in the zygote
 process, and for module code to be invoked around specialization in each forked
-child. From your module's point of view the contract is four methods, and the
-upstream header states the crucial point plainly: modules are loaded *after*
+child. From your module's point of view the contract is five methods —
+`onLoad`, plus a pre/post pair for app specialization and another for
+`system_server` — and the upstream header states the crucial point plainly: modules are loaded *after*
 zygote has forked the child, so **your code always runs in the app or
 `system_server` process, never in the zygote daemon itself**. "Running in
 zygote" is a useful shorthand for the privilege you inherit, not a description of

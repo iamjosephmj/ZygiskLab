@@ -12,8 +12,11 @@ where I think I am running?* Almost every hard bug in Zygisk work is a variant
 of that question — code that fires in the wrong process, at the wrong moment,
 or does not fire at all and leaves you debugging a hook that was never
 installed. So the first module you build is a witness. It prints, from each of
-the three callbacks Zygisk gives you, enough state to prove which process it is
-in and which side of the specialization boundary it is standing on.
+the three callbacks it implements — `onLoad` and the pair around app
+specialization — enough state to prove which process it is in and which side of
+the specialization boundary it is standing on. `ModuleBase` declares five in
+all; the `system_server` pair is covered in
+[Chapter 5](/ZygiskLab/book/load/05-anatomy-of-a-module/).
 
 The module is in the repo at `modules/01-hello-zygisk/`. Sixteen lines of
 substance in one `main.cpp`, two make fragments, a `module.prop`, and a build

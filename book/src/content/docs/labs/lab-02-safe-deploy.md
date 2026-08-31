@@ -49,10 +49,14 @@ least one of those from memory.
 
 2. **Read `deploy.sh` before you run it.** Open
    `modules/01-hello-zygisk/deploy.sh`. Its header comment is Chapter 7 in
-   miniature. Find the four decisions and be able to say why each is there:
+   miniature. Find these six decisions and be able to say why each is there:
    the `adb push` to `/data/local/tmp` rather than to the module directory;
-   the `mv` rather than `cp`; the `su -M` rather than `su -c`; the
-   `restorecon || chcon --reference` after the move.
+   the `mv` rather than `cp`; the `sush` helper's `su -M` rather than plain
+   `su -c`; the check that `$DEST_DIR` exists *before* anything is staged;
+   the `restorecon || chcon --reference` after the move, followed by reading
+   the label back with `ls -Z` and comparing it against `module.prop`'s
+   label; and the capture-and-compare of both md5 hashes instead of printing
+   them for you to eyeball.
 
 3. **Deploy.**
 
@@ -60,25 +64,40 @@ least one of those from memory.
    ./deploy.sh            # or ./deploy.sh <serial> with several devices attached
    ```
 
-   The script prints the on-device hash and the local hash and stops. It does
-   not reboot for you — deliberately, because comparing those two lines is a
-   step you should perform with your own eyes rather than delegate.
+   If any of the three checks fails — destination directory missing, hash
+   mismatch, label mismatch — the script exits non-zero with an `error:` line
+   explaining which one and why, instead of reporting success. If it
+   succeeds, it prints the installed path, the confirmed md5 hash, and the
+   confirmed SELinux label. It does not reboot for you: the checks above tell
+   you the file landed correctly, but only a reboot makes zygote load it, and
+   that step is still yours.
 
-4. **Compare the hashes.** They must match. If they differ, the deploy did not
-   land and nothing you observe afterwards is about your code. Check the module
-   `id`, the destination file name (`arm64-v8a.so`, the ABI, not the library
-   name), and whether the `su -M` command reported an error.
+4. **Confirm the deploy actually reported success.** Because `deploy.sh` now
+   asserts the hash match itself rather than just printing both sides, you no
+   longer need to eyeball two hashes — but you should understand what would
+   have stopped it. If the script had failed here, the cause would be one of:
+   the module `id` in `module.prop` not matching what is actually installed
+   on the device, the destination file name being wrong (`arm64-v8a.so`, the
+   ABI, not the library name), or the `su -M` command itself erroring. Note
+   the md5 the script printed; you will want it later.
 
-5. **Check the label.**
+5. **See what the label check verified.** `deploy.sh` already read the `.so`'s
+   label back with `ls -Z` and compared it against `module.prop`'s label,
+   failing loudly on a mismatch. `module.prop` is the correct reference
+   because the manager wrote it in place when it installed the module, so its
+   label is exactly what this provider's policy assigns to files belonging to
+   this module. Look at it yourself once, so you recognise it later without a
+   script checking for you:
 
    ```bash
    adb shell su -M -c 'ls -Z /data/adb/modules/zygisklab_hello/zygisk/'
    ```
 
-   Record what you see. Compare it against the label on `module.prop` in the
-   same module, which the installer created and you did not touch. If your `.so`
-   is labelled like a `/data/local/tmp` file, `restorecon` did not take — and
-   you are about to meet the "listed but silent" failure.
+   The `.so` and `module.prop` should carry the same label — if the deploy
+   succeeded, they already do. This is the "listed but silent" failure from
+   Chapter 4's catalogue: a mismatched label produces a module that is
+   present, correctly named, correctly sized, hash-identical to your build,
+   and simply never loads, with nothing in any log to say why.
 
 6. **Test without rebooting, and expect nothing to change.**
 
@@ -166,25 +185,31 @@ break.
     `adb shell su -c 'ksud module disable zygisklab_hello'`, then a recovery
     shell, then reflash. That path is why this was a spare device.
 
-15. **Redeploy properly and leave the device clean.** Run `./deploy.sh`, compare
-    hashes, reboot, confirm `build 3` prints and the app is healthy.
+15. **Redeploy properly and leave the device clean.** Run `./deploy.sh` — it
+    fails loudly if the destination, hash, or label check does not pass —
+    then reboot and confirm `build 3` prints and the app is healthy.
 
 ## Self-check
 
-Six checks. The first four say you deployed safely; the last two say you
-understand *why* it was safe, which is the difference between a safe deploy and
-a lucky one.
+Six checks. The first four say your deploy machinery worked and that you
+understand what it checked; the last two say you understand *why* it was
+safe, which is the difference between a safe deploy and a lucky one.
 
-1. **Did the hashes match before you rebooted, and did the new build's log line
-   appear only after?** Both halves matter. A matching hash before reboot with
-   old behaviour after reboot means the file landed but the loader did not pick
-   it up — a different problem from a failed deploy, and one you can only
-   distinguish because you checked both.
+1. **Did `deploy.sh` exit successfully, and did the new build's log line
+   appear only after you rebooted?** Both halves matter. A successful exit
+   (hashes matched, label matched, destination existed) with old behaviour
+   after reboot means the file landed but the loader did not pick it up — a
+   different problem from a failed deploy, and one you can only distinguish
+   because you checked both.
 
-2. **Is the `.so`'s SELinux label the same as the module's other files?** If you
-   never ran `ls -Z`, you have not verified this — you have assumed it. A
-   mislabelled module loads on some policies and silently does not on others,
-   so a working device is not evidence the label is right.
+2. **Can you say why `module.prop` — specifically that file, not "the zygisk
+   directory" or "a module you didn't deploy by hand" — is the correct
+   reference for the label check?** If your answer is "because the script
+   compares against it," you have trusted the check without understanding it.
+   The real answer is that the manager wrote `module.prop` in place at
+   install time, so its label is exactly what this provider's policy assigns
+   to this module's files — the one label in that directory guaranteed not to
+   have drifted.
 
 3. **Did you see the crash yourself, with the fault surfacing in the provider's
    library rather than in your own frames?** Reading step 11 is not the same as
