@@ -1,0 +1,6 @@
+id=zygisklab_companion
+name=ZygiskLab 06 - Companion Protocol
+version=1.0
+versionCode=1
+author=Joseph James
+description=Lab 6. The armed process asks a root companion for a file it cannot open itself, over a length-prefixed, versioned protocol, with a rejected malformed request as the negative control.
