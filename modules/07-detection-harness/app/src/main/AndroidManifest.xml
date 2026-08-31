@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Lab 7 detection harness.
+
+    Deliberately minimal permissions: this app inspects its own process
+    (/proc/self/*, world-readable filesystem paths, and system properties)
+    and nothing outside it. No INTERNET permission (nothing here is sent
+    anywhere; the report is copied/shared through the OS share sheet, which
+    needs no manifest permission of its own), no root request, no query for
+    other packages. If a future check ever needs a new permission, that is
+    itself worth noting in the README, because it would mean the harness had
+    started looking at something other than its own process.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <application
+        android:allowBackup="false"
+        android:label="@string/app_name"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.DetectionHarness">
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:label="@string/app_name">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+
+</manifest>

@@ -36,13 +36,31 @@ Reference rig: Pixel 6 Pro, Android 16, arm64, KernelSU-Next 3.3.0, Zygisk Next 
    `sdk.dir=/path/to/Android/Sdk`. Output is
    `app/build/outputs/apk/debug/app-debug.apk`.
 
-2. **Read the checks before you trust them.** Seven classes under
+2. **Read the checks before you trust them.** Nine classes under
    `app/src/main/java/dev/zygisklab/detectionharness/checks/`, plus
-   `CheckResult.kt` and `Report.kt`. Be able to say, for each check, what file
-   it reads and what would make it return `COULD_NOT_RUN`. Read
+   `Signatures.kt`, `CheckResult.kt` and `Report.kt`. Be able to say, for each
+   check, what file it reads and what would make it return `COULD_NOT_RUN`. Read
    `Signatures.kt` in particular: `INTERESTING_SUBSTRINGS` is the list
    `MapsCheck` and `MountInfoCheck` grep against, and it already contains
    `zygisklab`, which is why your own modules show up at all.
+
+   Read two of the nine especially closely, because they behave unlike the rest:
+
+   - `ThreadsCheck` enumerates `/proc/self/task` and prints every thread's
+     `comm` name as evidence. It deliberately does not classify those names —
+     it has no baseline of "normal" ART/Compose/framework thread names — so it
+     returns `FOUND` only for a structural anomaly (a listed tid whose `comm`
+     cannot be read) and otherwise `NOT_FOUND` with the inventory attached.
+     Judging that inventory is your job, not the tool's.
+   - `GotIntegrityCheck` reports `COULD_NOT_RUN` **even on a clean device**, and
+     that is correct behaviour, not a bug in your build. Read its KDoc before
+     you run anything. It can locate where `libc.so` is mapped from and flag an
+     impostor mapping under that name as `FOUND`; it cannot resolve what any GOT
+     slot actually holds, because that needs `dlsym` or an ELF
+     relocation-table parser this pure-Kotlin app does not have. Its evidence
+     names exactly what it did not evaluate.
+     [Chapter 24](/ZygiskLab/book/footprint/24-detection-harness/) explains why
+     that honest failure is the most instructive row in the report.
 
 3. **Install and run it with nothing armed.**
 
@@ -56,8 +74,13 @@ Reference rig: Pixel 6 Pro, Android 16, arm64, KernelSU-Next 3.3.0, Zygisk Next 
    in this run is the device and the root provider, not your module — that is
    the boundary [Chapter 21](/ZygiskLab/book/footprint/21-your-footprint/)
    drew, and this is the run that tells you where it actually falls on your
-   rig. If a check reports `COULD_NOT_RUN`, work out why before continuing: a
-   broken instrument reads the same as a clean process.
+   rig.
+
+   The predicted shape of a clean baseline is **eight `NOT_FOUND` and one
+   `COULD_NOT_RUN`** — the `COULD_NOT_RUN` being `GotIntegrityCheck`, by design.
+   Any *other* `COULD_NOT_RUN` is a broken instrument and you must work out why
+   before continuing: a check that could not run reads exactly like a clean
+   process, and that is the failure mode this harness is built to refuse.
 
 ### Part B — one module at a time
 
@@ -122,10 +145,27 @@ two at once and you cannot attribute anything.
     disagrees, the device wins. Those rows are the most valuable output of this
     lab; record them explicitly rather than quietly adjusting the table.
 
-13. **Note what the harness cannot see.** No check here walks GOT slots, reads
-    `/proc/self/task`, or times anything, so module 04's committed PLT hook,
-    module 05's JNI replacement and every behavioural trace are unmeasured, not
-    absent. A row that says "unmeasured" is an honest row; a blank one is not.
+13. **Note what the harness cannot see.** Match this against the harness
+    README's "What this harness does not measure" section and do not claim more
+    than it does:
+
+    - **Module 04's committed PLT hook is unmeasured, not absent.**
+      `GotIntegrityCheck` is present, runs, and still cannot resolve a slot
+      value; its `COULD_NOT_RUN` evidence is your citation. Do not read that
+      row as "no hook found".
+    - **Module 05's JNI replacement is unmeasured.** Nothing here compares a
+      method's entry point against the class that declared it.
+    - **`ThreadsCheck` reports, it does not classify.** A module-spawned thread
+      with an ordinary-looking name appears in the inventory and is flagged by
+      nothing; only your own reading of the list catches it. Diff the inventory
+      against your baseline rather than trusting the outcome field.
+    - **Nothing here times anything,** so every behavioural trace at the end of
+      Chapter 21 — launch-time deltas, changed error paths, altered ordering —
+      is outside the harness's reach entirely.
+    - **Nothing here is attested.** Every check is code running on hardware you
+      control.
+
+    A row that says "unmeasured" is an honest row; a blank one is not.
 
 ## Self-check
 
@@ -134,9 +174,23 @@ Running the harness is the easy half. You have finished this lab when:
 - Your baseline run is recorded in full, before any module was armed, and you
   can say which entries in it belong to the root provider or the device rather
   than to anything you wrote.
-- Every check returned `FOUND` or `NOT_FOUND` in every run, or you can explain
-  precisely why one returned `COULD_NOT_RUN` and what you would have to change
-  to make it run. You are not treating a `COULD_NOT_RUN` as a clean result.
+- You can state, in your own words, what `COULD_NOT_RUN` means for your
+  conclusions — that it is a statement about the instrument and not about the
+  process, and that it removes a row from your evidence rather than adding a
+  clean one. Specifically: you can say why `GotIntegrityCheck` returns it on
+  every run including the baseline, what it did evaluate, what it did not, and
+  what a boolean-returning version of that check would have told you about
+  module 04 instead. Any *other* `COULD_NOT_RUN` in any run is explained —
+  which file, which denial, what you would have to change to make it run — and
+  none of them is written up as a clean result.
+- You can name which of your own modules' traces this harness genuinely cannot
+  see, and separate them from the traces it looked for and did not find. At
+  minimum: module 04's `openat` PLT hook (no slot resolution), module 05's JNI
+  method replacement (no entry-point comparison), any module-spawned thread with
+  an unremarkable name (`ThreadsCheck` reports but does not classify), and every
+  behavioural or timing trace (nothing here times anything). Saying "the harness
+  found nothing" about any of these is the specific error this lab exists to
+  prevent.
 - For **every** `FOUND` in your table, you can point at the specific line of
   your own code — or, where the trace is not yours, the specific provider
   behaviour — that produced it. Not "the module was loaded": the decision, and

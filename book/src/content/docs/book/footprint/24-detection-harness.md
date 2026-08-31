@@ -18,7 +18,7 @@ code an app runs to look for it, and deferred every concrete path, property name
 and line count to "the harness". [Chapter 23](/ZygiskLab/book/footprint/23-existing-answers-surveyed/)
 ended each section by telling you to measure rather than trust the claim. This
 chapter is where the deferrals come due. `modules/07-detection-harness/` is an
-Android application that runs seven self-inspection checks against its own
+Android application that runs nine self-inspection checks against its own
 process and hands you the evidence, and [Lab 7](/ZygiskLab/labs/lab-07-detection-harness/) is you pointing your own modules at
 it and writing down what happens.
 
@@ -57,7 +57,7 @@ looking at something other than itself.
 
 ## The shape of a check
 
-Seven checks, one class each, under
+Nine checks, one class each, under
 `app/src/main/java/dev/zygisklab/detectionharness/checks/`. `Report.kt` builds
 the fixed list, runs it, and renders the results as the exact plain text the
 "Copy report" and "Share report" buttons hand off — what is on screen is what
@@ -92,6 +92,28 @@ the mount entry it flagged or the property value it read is a check you can
 disagree with. Lab 7's deliverable — a line of *your* code behind every hit —
 is only possible because each hit arrives carrying the raw text that produced it.
 
+That guarantee only holds if the text is exact, and two checks were quietly
+wrong about that until a closer read caught them. `LoadedLibrariesCheck` used
+to take the last whitespace-delimited field of each `/proc/self/maps` line as
+the backing path; a path containing a space — an installed-from location with
+one in it, a `(deleted)` suffix — was silently truncated to whatever followed
+the last space, not the path. It now splits with a field limit of six, so the
+regex consumes the five fixed columns before the path and leaves the
+remainder, spaces intact, as one string. `OpenFdCheck` had two smaller versions
+of the same mistake: it resolved each `/proc/self/fd/<n>` symlink with
+`canonicalPath`, which walks every further symlink it can and hands back
+where the chain ultimately ends up rather than the literal target the kernel
+recorded — evidence a reader could no longer check against `/proc/self/maps`
+themselves. It now calls `android.system.Os.readlink()`, which reads the link
+text once, literally. And its match against path-less kernel objects
+(`socket:`, `pipe:`, `anon_inode:`, `/memfd:`) used to accept `contains` as
+well as `startsWith`, so an ordinary path that merely had `socket:` somewhere
+inside it — a file an app-owned directory happened to be named that — would
+be silently dropped from the flagged set instead of being evaluated against
+the sandbox prefixes like any other path. All three are the same failure in
+different clothes: evidence that looked exact but was not, in a harness whose
+only argument for trusting it is that the evidence is exact.
+
 **Three states, not two.** `COULD_NOT_RUN` is a first-class outcome, not a
 quietly-folded-in `NOT_FOUND`. A file the app could not read, a syscall SELinux
 denied, an exception on an API level where the interface moved — none of those
@@ -124,7 +146,7 @@ something is there and this process is not allowed to see it, which is a
 different statement about the device than `ENOENT`, and the naive code cannot
 tell them apart.
 
-## The seven checks
+## The nine checks
 
 | Check | Class | Reads |
 |---|---|---|
@@ -135,6 +157,8 @@ tell them apart.
 | Tracer | `TracerCheck` | `TracerPid` in `/proc/self/status` |
 | Filesystem probes | `FilesystemProbeCheck` | `stat()` on a fixed list of root/provider paths |
 | Properties | `PropertiesCheck` | ten properties via `getprop`, against stock-production values |
+| Threads | `ThreadsCheck` | `/proc/self/task`, every thread's `comm` name, reported as inventory |
+| GOT integrity (partial) | `GotIntegrityCheck` | `/proc/self/maps`, for where `libc.so` is mapped from — not the GOT itself |
 
 `MapsCheck` and `MountInfoCheck` grep against `INTERESTING_SUBSTRINGS` in
 `Signatures.kt` — `magisk`, `zygisk`, `zygisklab`, `ksu`, `/data/adb/` and a
@@ -158,17 +182,114 @@ verdict. `ro.debuggable=1` is entirely ordinary on a userdebug build.
 neither root nor a module. A `FOUND` here means "something differs from the
 stock-production expectation", and nothing stronger.
 
+`ThreadsCheck` is the newest of the reading checks and the most restrained. It
+lists `/proc/self/task`, reads `/proc/self/task/<tid>/comm` for each entry, and
+puts the whole inventory — `tid 4193 -> "main"`, `tid 4210 -> "Jit thread pool"`,
+every binder thread, every GC thread — into the evidence. What it does not do is
+decide which of those names is suspicious. It has no stock baseline of ART,
+Compose and OkHttp thread names to compare against the way `PropertiesCheck` has
+stock property values, and inventing one would mean quietly deciding, on your
+behalf, what counts as anomalous on a device and an API level the author never
+saw. So the judgement stays with you, who knows which threads your own app is
+supposed to have. `FOUND` is reserved for a structural anomaly rather than a
+name: a tid still listed in `/proc/self/task` whose own `comm` file cannot be
+read, which should not happen for a live thread's own name. A clean process gets
+`NOT_FOUND` with the full inventory attached, and a module-spawned thread with an
+innocuous name sits in that inventory waiting for a reader to notice it. That is
+a weaker check than a classifier and an honester one.
+
+## The check that admits it cannot run
+
+`GotIntegrityCheck` is where this harness is most worth reading, and it is worth
+reading because it fails.
+
+[Chapter 22](/ZygiskLab/book/footprint/22-how-an-app-looks-for-you/) argued that
+GOT verification has the best false-positive profile of any check an app can
+perform on itself, because it tests a structural invariant instead of matching a
+name: the slot an imported function resolves through should hold an address
+inside the mapped range of the library that actually defines that function. A
+module that redirects `read` by rewriting a GOT entry puts an address inside its
+own `.so` there, and the mismatch is visible without knowing the module's name in
+advance. Every other check in this app is a name list or a location rule.
+This is the one that is not.
+
+This implementation cannot test that invariant. Resolving what a specific slot
+actually holds needs either `dlsym`, or opening the object and parsing its ELF
+headers, `.dynsym`/`.dynstr` and `.rela.plt`/`.rela.dyn` tables to compute the
+slot's offset and then reading live memory at it. Both routes need a native call
+or a complete relocation-table parser, and the harness is a pure-Kotlin app with
+no JNI or NDK code of its own; the SDK offers a Java-language app no supported
+way to resolve a dynamic symbol to a runtime address or to read another
+mapping's raw bytes. So the class does the part that is plain file I/O — it
+parses `/proc/self/maps` for mappings ending in `/libc.so` and checks they come
+from one of four expected locations:
+
+```kotlin
+private val EXPECTED_LIBC_PREFIXES = listOf(
+    "/apex/com.android.runtime/lib64/bionic/",
+    "/apex/com.android.runtime/lib/bionic/",
+    "/system/lib64/",
+    "/system/lib/",
+)
+```
+
+An extra mapping called `libc.so` from anywhere else is real structural evidence
+on its own — it is how a redirected slot could be made to look legitimate at a
+glance — and that, and only that, returns `FOUND`. The absence of an impostor
+proves nothing about any individual slot. So on a clean device this check
+returns **`COULD_NOT_RUN`**, and its evidence names precisely what was not
+evaluated:
+
+```text
+Part 1 only (where libc.so is mapped from) was evaluated. Part 2 -- resolving
+what any specific GOT slot for open, read, write, ioctl, stat actually holds,
+and comparing that address against the range(s) above -- needs dlsym() or an
+ELF relocation-table parser this pure-Kotlin app does not have, and was not
+evaluated.
+```
+
+Stay with that for a moment, because it is the argument of this whole chapter
+made concrete. The section above claimed `COULD_NOT_RUN` exists so a broken
+instrument is never mistaken for a clean process. Here is the most valuable
+check in the suite — the only one that tests an invariant rather than a name —
+reporting, on a perfectly healthy device, that it could not evaluate the thing
+it exists to evaluate. Had `Check` returned a boolean, this class would have
+returned `false`. `false` renders as "no GOT tampering detected". You would have
+armed module 04, whose entire purpose is a committed PLT hook on `openat`, read
+"no GOT tampering detected", and concluded your hook was invisible. It is not
+invisible; it was never looked for. A confident wrong answer, produced by the
+one check most likely to be believed.
+
+The three-state outcome is what stops that, and it costs the harness a row that
+would have read cleanly. That trade is the point. A `COULD_NOT_RUN` you have to
+chase down is worth more to you than a `NOT_FOUND` you cannot audit, and this
+check is worth more to the book unimplemented and honest than it would be
+working — because working, it would have taught you a technique, and failing, it
+teaches you what a result means.
+
+:::note
+This is a limit of the harness, not of the technique. A native detection module
+with `dlopen`/`dlsym` and raw memory access can walk the relocations and test the
+invariant properly. Nothing here says the check is impossible; it says this app
+cannot do it, which is a different and more useful statement.
+:::
+
 ## The baseline comes first
 
 Install the harness, arm nothing, launch it, and read the report before you do
 anything else.
 
 On an unmodified device — and on a rooted device with none of Labs 1–6 armed at
-the harness — the prediction is that every check returns `NOT_FOUND`. No
-interesting maps entries, no descriptors outside the sandbox, no overlay mounts,
-no unusual libraries, `TracerPid: 0`, every probed path unreachable, every
-property matching. `Report.asText` says so in as many words when nothing is
-found, because a clean run is not a non-result.
+the harness — the prediction is that every check returns `NOT_FOUND` with one
+deliberate exception. No interesting maps entries, no descriptors outside the
+sandbox, no overlay mounts, no unusual libraries, `TracerPid: 0`, every probed
+path unreachable, every property matching, every thread's `comm` readable. The
+exception is `GotIntegrityCheck`, which reports `COULD_NOT_RUN` on a clean
+device by design, for the reason above. `Report.asText` calls out an
+all-`NOT_FOUND` run in as many words when every other check comes back that way,
+because a clean run is not a non-result. If you see eight `NOT_FOUND` and one
+`COULD_NOT_RUN` on an unarmed launch, that is the expected shape of a baseline,
+not a broken build.
 
 That prediction is doing real work and it will probably not hold cleanly. Your
 rig is rooted; KernelSU-Next and Zygisk Next are installed on it; the root
@@ -220,16 +341,26 @@ harness disagrees, that is a finding worth the whole lab.
 
 **Module 04, `zygisklab_plthook`.** A committed PLT hook on `openat`, plus a
 resident library on the armed path. Maps and libraries should fire as with 01.
-The hook itself should not: none of the seven checks walks GOT slots and compares
-addresses against the mapped range of the defining library. That is the honest
-gap in this harness, and Chapter 21 named the hook as the trace that survives
-everything else. Write it down as unmeasured rather than as absent.
+The hook itself should not, and this is now the interesting case, because the
+check aimed at it is present and still cannot see it. `GotIntegrityCheck` runs,
+parses maps, confirms `libc.so` comes from the Runtime APEX — and stops there,
+because resolving the `openat` slot needs the native access the app does not
+have. Your hook rewrites exactly the kind of slot the check is named after, and
+the check's own evidence will tell you it never read one. Record module 04's hook
+as **unmeasured**, with the `COULD_NOT_RUN` row as your citation for why. This
+is the same gap Chapter 21 named as the trace that survives everything else; the
+difference is that the harness now says so itself rather than leaving a silent
+blank.
 
 **Module 05, `zygisklab_mainthread`.** Replaces `android.os.Process.setArgV0`
-rather than spawning a thread. No check reads `/proc/self/task`, so the thread
-you did not create is, again, a trace avoided rather than a trace measured. The
-JNI replacement is the ART-level twin of module 04's mismatch and is equally
-outside what these seven checks see.
+rather than spawning a thread. `ThreadsCheck` now reads `/proc/self/task`, so
+this prediction has become testable: the inventory it prints should be the
+harness's own ART, binder and render threads and nothing else, and comparing that
+list against the unarmed baseline is how you confirm the thread you chose not to
+spawn is genuinely absent rather than merely unlooked-for. The JNI replacement
+itself is a different matter — it is the ART-level twin of module 04's mismatch,
+no check compares a method's entry point against the class it was declared in,
+and it stays outside what these nine checks see.
 
 **Module 06, `zygisklab_companion`.** The one with a real chance of moving
 `OpenFdCheck`. Its companion socket is opened in `preAppSpecialize` and closed
@@ -272,12 +403,17 @@ measured something.
 
 ## What this does not settle
 
-Seven checks are not a detection product, and the gap is worth stating plainly
+Nine checks are not a detection product, and the gap is worth stating plainly
 so you do not walk away over-confident.
 
-No check walks relocations, so a committed hook is invisible to it. No check
-reads `/proc/self/task`, `/proc/self/smaps`, or the dynamic symbol tables of
-loaded objects. No check times anything, so the behavioural traces at the end of
+No check resolves a relocation, so a committed hook is invisible to it —
+`GotIntegrityCheck` is where that gap now lives, declared rather than hidden.
+`ThreadsCheck` reads `/proc/self/task` but only reports it; nothing here
+classifies a thread name, so a module thread called something ordinary passes
+under a reader who is not paying attention. No check reads `/proc/self/smaps` or
+the dynamic symbol tables of loaded objects, and no check compares the running
+code against a known-good copy of the APK — integrity is a different question
+from injection and out of scope here. No check times anything, so the behavioural traces at the end of
 Chapter 21 — launch-time deltas, changed error paths, altered ordering — are
 entirely outside its reach, and those are the ones a large app's telemetry is
 best placed to see and you are worst placed to measure. Nothing here is attested:
