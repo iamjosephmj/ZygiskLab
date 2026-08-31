@@ -32,7 +32,7 @@ DEST_DIR="/data/adb/modules/$MODULE_ID/zygisk"
 DEST="$DEST_DIR/arm64-v8a.so"
 STAGE="/data/local/tmp/arm64-v8a.so"
 
-SO="libs/arm64-v8a/libzygisklab.so"
+SO="libs/arm64-v8a/libzygisklab_armed.so"
 [ -f "$SO" ] || { echo "build first: ./build.sh" >&2; exit 1; }
 
 # Run a command as root in the global mount namespace and return its output.

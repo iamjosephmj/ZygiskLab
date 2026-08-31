@@ -1,0 +1,6 @@
+id=zygisklab_armed
+name=ZygiskLab 03 - Armed Once
+version=1.0
+versionCode=1
+author=Joseph James
+description=Lab 3. Arms for exactly one configured process (target.txt) and dlcloses out of every other app launch, logging the cost of the unarmed path.
