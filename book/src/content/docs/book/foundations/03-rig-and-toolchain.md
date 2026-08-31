@@ -31,12 +31,11 @@ observed. Where behaviour is likely to differ on Magisk, on another provider
 version, or on another Android release, the book says so rather than quietly
 generalising.
 
-Two of those five values do most of the work. **arm64** determines the ABI
-directory your `.so` lands in and the toolchain you build with. **Zygisk Next
-1.4.5** is the thing that actually loads your module: KernelSU-Next provides
-root and the module mounting infrastructure, but it does not implement Zygisk.
-Zygisk Next is a separate module installed on top of it, and it is the
-component that reads your `zygisk/` directory and calls your callbacks. If you
+Two of those values do most of the work. **arm64** determines the ABI your `.so`
+is named for and the toolchain you build with. **Zygisk Next 1.4.5** is what
+actually loads your module: KernelSU-Next provides root and module mounting, but
+does not implement Zygisk. Zygisk Next is a separate module installed on top,
+and it is what reads your `zygisk/` directory and calls your callbacks. If you
 remember one distinction from this chapter, make it that one — "root works" and
 "Zygisk works" are independent claims, and beginners conflate them constantly.
 
@@ -63,12 +62,11 @@ and an unanswered prompt looks identical to a hang. If it fails outright,
 nothing further in this chapter will work.
 
 :::note
-On KernelSU, `su -c` and `su -M -c` are not interchangeable. `-M` runs the
-command in the global mount namespace, which is what you need to write into the
-module directory — `deploy.sh` in the repo uses `su -M -c` for exactly this
-reason, and a plain `su -c` write there is denied even as root. If a write into
-`/data/adb/modules` mysteriously fails, check the flag before you check
-anything else.
+On KernelSU, `su -c` and `su -M -c` are not interchangeable. `-M` runs in the
+global mount namespace, which is what writing into the module directory
+requires — the repo's `deploy.sh` uses `su -M -c` for exactly this reason, and a
+plain `su -c` write there is denied even as root. If a write into
+`/data/adb/modules` mysteriously fails, check that flag first.
 :::
 
 **Is the module infrastructure processing modules at all?**
@@ -109,17 +107,17 @@ machinery is running. Only your own log line tells you it reached *your* code.
 Use a device you can afford to destroy. This is not caution for its own sake.
 
 You will bootloop this device. Not "might" — a module that crashes during
-zygote's own startup takes every app process with it, and the visible symptom is
-a phone that reaches the boot animation and stays there. That is a normal
-Tuesday in module development, not an exceptional disaster, and the recovery
-procedure at the end of this chapter exists because you will use it.
+zygote's startup takes every app process with it, and the symptom is a phone
+that reaches the boot animation and stays there. That is a normal Tuesday in
+module development, and the recovery procedure below exists because you will
+use it.
 
 More to the point, Part II's Lab 2 asks you to deliberately corrupt a running
 zygote — to overwrite a mapped `.so` in place and watch app specialization
-segfault, so that you understand *why* `deploy.sh` uses an atomic `mv` instead
-of `cp`. That lab is only instructive if you are willing to run it. On your
-daily driver you will read about it and skip it, and you will learn nothing,
-because the mechanism only becomes real when you have watched it happen.
+segfault, so you understand *why* `deploy.sh` uses an atomic `mv` rather than
+`cp`. That lab only teaches if you are willing to run it. On your daily driver
+you will read about it and skip it, and learn nothing, because the mechanism
+only becomes real once you have watched it happen.
 
 A device you cannot afford to reflash makes you timid, and timid experimentation
 teaches nothing. The requirements are modest: an unlockable bootloader, a
@@ -136,9 +134,8 @@ device, your own apps, or written permission — nothing else.
 
 ## The NDK and the API level
 
-A Zygisk module is a native shared library. There is no Java, no Gradle, no
-APK — the build is `ndk-build` over a `jni/` directory, and the output is a
-single `.so`.
+A Zygisk module is a native shared library: no Java, no Gradle, no APK. The
+build is `ndk-build` over a `jni/` directory, and the output is a single `.so`.
 
 Get the NDK through Android Studio's SDK Manager (SDK Tools → NDK) or as a
 standalone download. Either way you end up with a versioned directory
@@ -201,8 +198,8 @@ costs in binary size.
 
 ## `module.prop`, field by field
 
-`module.prop` is the module's identity card. It is a plain `key=value` file with
-UNIX (LF) line endings — CRLF breaks parsing. Here is the repo's real one:
+`module.prop` is the module's identity card: a plain `key=value` file with UNIX
+(LF) line endings, since CRLF breaks parsing. The repo's real one:
 
 ```properties
 id=zygisklab_hello
@@ -236,10 +233,9 @@ over an existing one. Non-integer content here is a malformed file.
 **`author`** — display only.
 
 **`description`** — display only, one line. Providers may append to or overwrite
-it at runtime to report status: Zygisk Next reports modules it failed to load,
-and a module implicated in a crash, through the description shown in the
-manager. So text you did not write appearing there is the provider talking, and
-it is worth reading.
+it at runtime to report status: Zygisk Next surfaces load failures and
+crash-implicated modules through the description shown in the manager. Text you
+did not write appearing there is the provider talking, and it is worth reading.
 
 The one common optional field is **`updateJson`**, a URL pointing at update
 metadata for the manager's in-app update check. The repo's module omits it, and
@@ -253,8 +249,8 @@ re-read your C++.
 
 ## The module directory on the device
 
-Modules live under `/data/adb/modules/<id>/`. The repo's `build.sh` packages
-exactly two things into the flashable zip:
+Modules live under `/data/adb/modules/<id>/`. The repo's `build.sh` packages two
+things into the flashable zip:
 
 ```bash
 mkdir -p "out/pkg/zygisk"
@@ -281,11 +277,11 @@ produces the pure form of the failure this chapter opened with: the module is
 listed, the provider is running, and nothing ever happens.
 
 The Magisk module format defines other paths the *module author* may create,
-none of which Lab 1 uses: `system/`, mounted over `/system`; the
-`post-fs-data.sh` and `service.sh` boot scripts; `uninstall.sh`; `action.sh` for
-the manager's action button; `system.prop`; and `sepolicy.rule`. They are listed
-so you recognise them in other people's modules — the book uses `service.sh`
-later, for a root-side companion process.
+none used by Lab 1: `system/`, mounted over `/system`; the `post-fs-data.sh` and
+`service.sh` boot scripts; `uninstall.sh`; `action.sh` for the manager's action
+button; `system.prop`; and `sepolicy.rule`. They are listed so you recognise
+them in other people's modules — the book uses `service.sh` later, for a
+root-side companion.
 
 Separately there are marker files the *provider* manages, which you never create
 by hand:
@@ -312,61 +308,55 @@ provider version and expect it to move between releases.
 
 ## Reading logs that matter
 
-Your module's own log is the first-class diagnostic, and the repo's `main.cpp`
-sets up exactly one tag:
+Your own log is the first-class diagnostic. The repo's `main.cpp` sets up one
+tag:
 
 ```cpp
 #define LOG_TAG "ZygiskLab"
 ```
 
-So the primary command, straight from the module's README, is:
+So the primary command, from the module's README, is:
 
 ```bash
 adb logcat -s ZygiskLab
 ```
 
-`-s` sets the silent-by-default filter: everything is suppressed except the tags
-you name. Add a level and clear the buffer first when you are about to reproduce
-something:
+`-s` suppresses everything except the tags you name. Clear the buffer first when
+you are about to reproduce something:
 
 ```bash
 adb logcat -c && adb logcat -s ZygiskLab:V
 ```
 
-To watch your tag and the provider at the same time, name both — `logcat -s`
-takes a list:
+To watch your tag and the provider together, name both — `-s` takes a list:
 
 ```bash
 adb logcat -s ZygiskLab:V zygisk:V
 ```
 
-The provider's exact tag is not part of any API and is not something this
-chapter can state for you. Find it once, empirically, and then reuse it: reboot
-with `adb logcat -b all` running and grep the early output for the provider's
-name, or run `adb logcat | grep -i zygisk` and see what tags appear. That is
-five minutes of work that pays for itself in every subsequent debugging session.
+The provider's exact tag is not part of any API and this chapter will not invent
+one for you. Find it once, empirically, then reuse it: reboot with
+`adb logcat -b all` running and grep the early output for the provider's name,
+or run `adb logcat | grep -i zygisk` and see which tags appear. Five minutes of
+work that pays for itself every subsequent debugging session.
 
 ### Where a crash in your module actually surfaces
 
 This is the part beginners get wrong, and it costs hours.
 
-Your module's code runs inside a process that is not yours. In
-`preAppSpecialize` you are inside a zygote fork; in `postAppSpecialize` you are
-inside the app. If you dereference a null pointer there, the process that
-receives the SIGSEGV is the app process, not some notional module process. So:
+Your module's code runs inside a process that is not yours: in
+`preAppSpecialize` a zygote fork, in `postAppSpecialize` the app. Dereference a
+null pointer there and the process that takes the SIGSEGV is the app. So:
 
-- There is **no stack trace attributed to your module**. There is no crash
-  dialog naming you. Android's tombstone machinery reports the crash against
-  the process that died, which is the app.
-- The symptom the user sees is **the app failing to start**, or dying
-  immediately after launch, with no message. If the crash happens early enough
-  or in zygote itself, the symptom is a **boot loop**.
-- The crash *is* recorded, but under the native crash tag, in a tombstone whose
-  faulting frames point into your `.so` by path — which is the actual evidence
-  that it was you.
+- There is **no stack trace attributed to your module** and no dialog naming
+  you. Android reports the crash against the process that died — the app.
+- The visible symptom is **the app failing to start**, or dying immediately
+  after launch, with no message. Early enough, or in zygote itself, the symptom
+  is a **boot loop**.
+- The crash *is* recorded, under the native crash tag, in a tombstone whose
+  faulting frames point into your `.so` by path. That is the evidence it was you.
 
-So when an armed app stops launching after you install a module, the sequence
-is:
+So when an armed app stops launching after you install a module:
 
 ```bash
 adb logcat -b crash
@@ -375,49 +365,43 @@ adb shell su -c 'ls -lt /data/tombstones | head'
 ```
 
 The first two show the native crash report as it happens; the third lists
-tombstone files newest-first so you can find one from a crash that already
-happened. Inside a tombstone, look at the backtrace for a frame whose mapped
-file is your module's `.so` path under `/data/adb/modules`. That frame is your
-answer.
+tombstones newest-first, for a crash that already happened. In a tombstone, look
+in the backtrace for a frame whose mapped file is your `.so` under
+`/data/adb/modules`. That frame is your answer.
 
-The other place to look is the provider itself. Zygisk Next detects modules that
-fail to load and modules implicated in a crash, and reports them in its module
-status and WebUI. That report is often faster than reading a tombstone, and it
-is the reason to check the manager before assuming the log has nothing.
+The other place to look is the provider. Zygisk Next detects modules that fail
+to load and modules implicated in a crash, and reports them in its module status
+and WebUI — often faster than reading a tombstone, and the reason to check the
+manager before assuming the log has nothing.
 
 :::note
-A module that produces *no* output at all is a different failure from a module
-that crashes, and the two need different investigations. No `onLoad` line means
-the provider never got as far as your code: wrong ABI file name, wrong SELinux
-label, wrong `module.prop`, module disabled, provider not running, or the app
-not in scope. A crash means your code ran and was wrong. Always establish which
-one you have before theorising.
+A module that produces *no* output is a different failure from one that crashes,
+and they need different investigations. No `onLoad` line means the provider
+never reached your code: wrong ABI file name, wrong SELinux label, malformed
+`module.prop`, module disabled, provider not running, or the app not in scope. A
+crash means your code ran and was wrong. Establish which you have before
+theorising.
 :::
 
 ## Recovering a device that will not boot
 
-Read this section now, while your device is booting normally. The one thing
-that makes a bootloop expensive is discovering the procedure while you are
-inside it.
+Read this section now, while your device still boots. The thing that makes a
+bootloop expensive is discovering the procedure while you are inside it.
 
-There are four levers, in increasing order of severity.
+Four levers, in increasing order of severity.
 
-**1. Safe mode.** KernelSU has a built-in safe mode that disables every module
-on the modules page. The KernelSU documentation describes triggering it by
-pressing the volume-down key more than three times after the first boot screen —
-distinct press-and-release motions, not a held button. The timing is fiddly and
-it does not always catch on the first attempt; that is normal, try again. Some
-Android builds also have their own system safe mode reached by long-pressing
-volume-down, which is a different mechanism with the same effect on modules.
-Once booted, uninstall the offending module through the manager and reboot
-normally.
-
-Magisk's equivalent is Core Only Mode, which likewise boots with modules
-disabled.
+**1. Safe mode.** KernelSU has a built-in safe mode that disables every module on
+the modules page. Its documentation describes triggering it by pressing
+volume-down more than three times after the first boot screen — distinct
+press-and-release motions, not a held button. The timing is fiddly and often
+misses on the first attempt; that is normal, try again. Some Android builds also
+have their own system safe mode via a long-press of volume-down: a different
+mechanism, same effect on modules. Once booted, uninstall the offending module
+through the manager and reboot. Magisk's equivalent is Core Only Mode.
 
 **2. ADB, if the device gets far enough.** A device stuck at the boot animation
 sometimes still has `adbd` running, which turns a brick into a two-command fix.
-Check with `adb devices`, and if it responds, use KernelSU's own tool:
+Check `adb devices`; if it responds, use KernelSU's own tool:
 
 ```bash
 adb shell su -c 'ksud module list'
@@ -425,11 +409,10 @@ adb shell su -c 'ksud module disable <id>'
 adb reboot
 ```
 
-`ksud module uninstall <id>` removes it outright. Prefer disabling first — you
-want the module still on disk so you can look at what you shipped.
+`ksud module uninstall <id>` removes it outright. Prefer disabling — you want
+the module still on disk so you can inspect what you shipped.
 
-**3. A recovery shell.** From recovery, mount data and take the module out
-directly:
+**3. A recovery shell.** From recovery, mount data and remove the module:
 
 ```bash
 mount /data
@@ -443,33 +426,30 @@ touch /data/adb/modules/<id>/disable
 ```
 
 The `disable` marker is honoured by both Magisk and KernelSU, since KernelSU
-follows the Magisk module format. Whether your recovery has a shell at all
-depends on what you flashed; a custom recovery generally does, stock recovery
-generally does not, which is a good argument for having one available before you
-need it.
+follows the Magisk module format. Whether your recovery has a shell depends on
+what you flashed — a custom recovery generally does, stock recovery generally
+does not — which is an argument for having one available before you need it.
 
 :::caution
 If the device will not boot *and* has no recovery shell and no ADB, safe mode is
-your last software option before reflashing. This is the concrete reason the
-spare-device rule at the top of this chapter is not optional.
+your last software option before reflashing. That is the concrete reason the
+spare-device rule is not optional.
 :::
 
-**4. Reflash.** Factory image, fastboot, start again. Download the image ahead of
-time.
+**4. Reflash.** Factory image, fastboot, start again.
 
-There is also a KernelSU-specific escape hatch for the case where root itself is
-the problem rather than one module: the KernelSU rescue guide describes removing
-`/data/adb/ksud` from recovery, and optionally deleting the injection files at
-`/metadata/ksu/modules.rc` and `/metadata/watchdog/ksu/modules.rc`. That
-disables the whole KernelSU module pipeline rather than one module. Treat it as
-a rung above removing a module directory, and confirm the paths against the
-rescue guide for your KernelSU version — they are implementation details, not a
-stable contract.
+There is also a **KernelSU-specific** escape hatch for when root itself, rather
+than one module, is the problem: the KernelSU rescue guide describes removing
+`/data/adb/ksud` from recovery and optionally deleting the injection files at
+`/metadata/ksu/modules.rc` and `/metadata/watchdog/ksu/modules.rc`. That takes
+out the whole KernelSU module pipeline. Confirm those paths against the rescue
+guide for your KernelSU version — they are implementation details, not a stable
+contract.
 
 ## Before you write any module code
 
-A checklist you can run in about two minutes. Each line is a claim you can
-falsify, which is the only kind worth checking.
+A two-minute checklist. Each line is a claim you can falsify, which is the only
+kind worth checking.
 
 - `adb devices -l` lists the device
 - `adb shell su -c id` prints `uid=0(root)`
@@ -481,13 +461,12 @@ falsify, which is the only kind worth checking.
 - You know your provider's logcat tag, having found it once yourself
 - You have a factory image on disk and you know how to enter safe mode
 
-The last two are the ones people skip, and they are the two that decide whether
-a bad afternoon costs you ten minutes or two days.
+The last two are the ones people skip, and the two that decide whether a bad
+afternoon costs ten minutes or two days.
 
-Everything above is *expected* behaviour, described from the repository's real
-build scripts and from the KernelSU and Magisk documentation. This chapter is
-marked unverified: none of these commands has been run on the rig for this
-write-up. Where a path, tag or menu item is provider-specific it has been
-labelled as such rather than stated flatly — check those against your own
-provider version, and trust your own `onLoad` log line over anything on this
-page.
+Everything above is *expected* behaviour, drawn from the repository's real build
+scripts and from the KernelSU and Magisk documentation. This chapter is marked
+unverified: none of these commands has been run on the rig for this write-up.
+Where a path, tag or menu item is provider-specific it is labelled as such —
+check those against your own provider version, and trust your own `onLoad` log
+line over anything on this page.

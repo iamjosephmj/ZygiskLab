@@ -482,7 +482,7 @@
       "slug": "lab-02-safe-deploy",
       "title": "Deploying without bricking zygote",
       "chapter": 7,
-      "module": "02-safe-deploy",
+      "module": "01-hello-zygisk",
       "deliverable": "A deploy.sh that is safe by construction, plus a deliberate reproduction of the corruption so the reader has seen the crash signature once, on a spare device."
     },
     {
