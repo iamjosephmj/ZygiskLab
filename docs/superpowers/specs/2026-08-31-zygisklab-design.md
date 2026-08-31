@@ -75,7 +75,8 @@ ZygiskLab/
 │           │   └── appendices/
 │           └── labs/               # lab 1–7
 └── modules/                        # one buildable module per lab
-    └── NN-name/{jni/,module.prop,build.sh,README.md}
+    ├── NN-name/{jni/,module.prop,build.sh,README.md}
+    └── 07-detection-harness/app/   # Lab 7's Android app (the one Gradle project)
 ```
 
 Each module directory is self-contained: `jni/Android.mk`, `jni/Application.mk`,
@@ -410,8 +411,11 @@ its detection counterpart.*
 
 ### 24. A detection harness *(Lab 7)*
 
-- Building an app that inspects itself using the Chapter 22 checks and reports
-  what it finds
+- Building an Android app that inspects itself using the Chapter 22 checks and
+  reports what it finds — a real app process, because a root shell sees a
+  different world than an app does
+- Harness structure: one check per module, each returning evidence rather than
+  a boolean, so results are readable and arguable
 - Establishing a clean baseline on an unmodified process first
 - Measuring your own modules from Labs 1–6 against it
 - Reading the results: which of your design decisions produced which finding
@@ -456,10 +460,17 @@ its detection counterpart.*
 - Defeating platform attestation
 - Magisk-specific verification (call-outs only)
 
-## Open questions for review
+## Resolved on review (2026-08-31)
 
-1. 25 chapters and 7 labs — right size, or should Parts III–IV be merged?
-2. Chapter 15 (ART hooking) is survey-only by design, since a working
-   implementation is a book of its own. Is survey-only the right call?
-3. Should Lab 7's detection harness be an Android app (more realistic) or a
-   shell script (far less to maintain)?
+1. **Size:** 25 chapters and 7 labs stands. Parts III and IV stay separate —
+   the `preAppSpecialize` / `postAppSpecialize` boundary is the book's central
+   distinction and merging them would blur it.
+2. **Chapter 15:** survey-only, as designed. A working ART hooking
+   implementation is a book of its own; the chapter explains the mechanism,
+   surveys existing implementations, and is honest about the fragility.
+3. **Lab 7:** an **Android app**, not a shell script. A real app performing the
+   Chapter 22 checks from inside its own process is the only version that
+   measures what an app can actually see; a shell script running as root sees a
+   different world and would teach the wrong lesson. It lives at
+   `modules/07-detection-harness/app/` and is the one Gradle project in the
+   repo.
