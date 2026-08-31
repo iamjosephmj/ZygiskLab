@@ -6,8 +6,6 @@ sidebar:
 status: unverified
 ---
 
-<span class="zl-status" data-status="unverified">Unverified</span>
-
 **Chapter:** 14
 **Module:** `modules/04-plt-hook/`
 
@@ -17,8 +15,7 @@ Hook a libc call in one target app, log it, and show a correct non-hooked contro
 
 ## Prerequisites
 
-Reference rig: Pixel 6 Pro, Android 16, arm64, KernelSU-Next 3.3.0,
-Zygisk Next 1.4.5. Use a spare device, not your daily driver.
+Reference rig: Pixel 6 Pro, Android 16, arm64, KernelSU-Next 3.3.0, Zygisk Next 1.4.5. Use a spare device, not your daily driver.
 
 ## Steps
 

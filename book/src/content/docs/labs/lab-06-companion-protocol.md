@@ -6,8 +6,6 @@ sidebar:
 status: unverified
 ---
 
-<span class="zl-status" data-status="unverified">Unverified</span>
-
 **Chapter:** 18
 **Module:** `modules/06-companion-protocol/`
 
@@ -17,8 +15,7 @@ A request/response exchange where the app process asks the companion for somethi
 
 ## Prerequisites
 
-Reference rig: Pixel 6 Pro, Android 16, arm64, KernelSU-Next 3.3.0,
-Zygisk Next 1.4.5. Use a spare device, not your daily driver.
+Reference rig: Pixel 6 Pro, Android 16, arm64, KernelSU-Next 3.3.0, Zygisk Next 1.4.5. Use a spare device, not your daily driver.
 
 ## Steps
 

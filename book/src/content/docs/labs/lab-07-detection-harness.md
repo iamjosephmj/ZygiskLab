@@ -6,8 +6,6 @@ sidebar:
 status: unverified
 ---
 
-<span class="zl-status" data-status="unverified">Unverified</span>
-
 **Chapter:** 24
 **Module:** `modules/07-detection-harness/`
 
@@ -17,8 +15,7 @@ A table of your own modules against the check matrix, with the specific line of 
 
 ## Prerequisites
 
-Reference rig: Pixel 6 Pro, Android 16, arm64, KernelSU-Next 3.3.0,
-Zygisk Next 1.4.5. Use a spare device, not your daily driver.
+Reference rig: Pixel 6 Pro, Android 16, arm64, KernelSU-Next 3.3.0, Zygisk Next 1.4.5. Use a spare device, not your daily driver.
 
 ## Steps
 

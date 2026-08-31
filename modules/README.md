@@ -25,6 +25,10 @@ NN-lab-name/
   `/data/local/tmp` and then `mv`-ing into the module directory under
   `su -M`. It never `cp`s over the live `.so` — zygote holds it mapped, and
   overwriting in place crashes app specialization. See Chapter 7 for why.
+- `jni/zygisk.hpp` is vendored from upstream, not written here — each copy
+  records the source URL, targeted `ZYGISK_API_VERSION`, and fetch date in a
+  header comment. Re-check it against upstream before targeting a newer
+  Zygisk API; do not hand-edit it.
 
 ## The one exception
 

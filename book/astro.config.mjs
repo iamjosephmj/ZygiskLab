@@ -18,6 +18,11 @@ export default defineConfig({
       head: [
         { tag: 'meta', attrs: { name: 'theme-color', content: '#161616' } },
       ],
+      components: {
+        // Renders the verification badge/banner from frontmatter `status`
+        // instead of a hand-written span - see src/components/PageTitle.astro.
+        PageTitle: './src/components/PageTitle.astro',
+      },
       sidebar,
     }),
   ],

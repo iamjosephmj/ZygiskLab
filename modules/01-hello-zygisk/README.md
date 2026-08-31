@@ -8,10 +8,17 @@ loaded.
 Three log lines, in this order, for each armed app launch:
 
 1. `onLoad` — the module's library is in the process
-2. `preAppSpecialize` — still the zygote fork; prints the target `nice_name`
-3. `postAppSpecialize` — now the app; the uid has changed
+2. `preAppSpecialize` — still the zygote fork; prints both `getuid()` (the
+   process's *current* identity) and `args->uid` (the specialization
+   *argument*: the uid the process is about to become)
+3. `postAppSpecialize` — now the app; prints `getuid()` again
 
-Seeing all three, with the uid changing between lines 2 and 3, is the proof
+`args->uid` in line 2 does not change — it is a value read out of the
+specialization request, not a live read of the process. It tells you the
+destination in advance. The value that actually changes is `getuid()`: `0`
+(root, inherited from zygote) in line 2, the app's own uid in line 3. Seeing
+`getuid()` move from `0` to the app's uid across that boundary, with
+`args->uid` in line 2 having already told you what to expect, is the proof
 that you ran inside a specific app process rather than in zygote.
 
 ## Build

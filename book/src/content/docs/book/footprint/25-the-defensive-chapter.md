@@ -6,12 +6,11 @@ sidebar:
 status: unverified
 ---
 
-<span class="zl-status" data-status="unverified">Unverified</span>
+The traces you left, stage by stage — and how apps look for them.
 
-:::caution[Not yet verified on the rig]
-This chapter has been written but not yet run end to end on the reference rig
-(Pixel 6 Pro, Android 16, arm64, KernelSU-Next 3.3.0, Zygisk Next 1.4.5).
-Treat the procedures here as untested until this banner says otherwise.
+:::caution[Detection and measurement]
+This chapter covers detection mechanisms and measurement on systems you
+own or are authorised to assess. See [Rules of engagement](/ZygiskLab/book/foundations/02-rules-of-engagement/).
 :::
 
 ## In this chapter

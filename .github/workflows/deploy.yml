@@ -39,6 +39,9 @@ jobs:
           npm run gen
           git diff --exit-code src/sidebar.json
 
+      - name: Check for orphaned pages and stale titles
+        run: node scripts/generate.mjs --check
+
       - name: Build site
         run: npm run build
 
