@@ -1,6 +1,7 @@
 // @ts-check
 import { defineConfig } from 'astro/config';
 import starlight from '@astrojs/starlight';
+import sidebar from './src/sidebar.json' with { type: 'json' };
 
 export default defineConfig({
   site: 'https://iamjosephmj.github.io',
@@ -17,7 +18,7 @@ export default defineConfig({
       head: [
         { tag: 'meta', attrs: { name: 'theme-color', content: '#161616' } },
       ],
-      sidebar: [],
+      sidebar,
     }),
   ],
 });
