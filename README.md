@@ -1,5 +1,7 @@
 # ZygiskLab
 
+[![Deploy to GitHub Pages](https://github.com/iamjosephmj/ZygiskLab/actions/workflows/deploy.yml/badge.svg)](https://github.com/iamjosephmj/ZygiskLab/actions/workflows/deploy.yml)
+
 A book on writing Zygisk modules — from a hello-world that only proves it
 loaded, through deep injection inside a live app process, to the traces a
 module leaves behind and how apps look for them.
