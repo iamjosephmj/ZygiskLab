@@ -1,7 +1,6 @@
 #include <android/log.h>
 #include <unistd.h>
 #include <sys/types.h>
-#include <cstring>
 
 #include "zygisk.hpp"
 
