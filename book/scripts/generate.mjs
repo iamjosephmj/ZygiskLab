@@ -26,6 +26,9 @@ if (checkMode) {
 //   (b) a page whose frontmatter `title` no longer matches the manifest's
 //       title for that slug (a title changed in the manifest but the file
 //       on disk was never updated)
+//   (c) an internal /ZygiskLab/... link pointing at a page that does not
+//       exist. Starlight builds a dead internal link without complaint, so
+//       nothing else in the pipeline catches these.
 // ---------------------------------------------------------------------------
 function runCheck() {
   const claimed = new Map(); // relative path (posix, no extension concerns) -> expected title
@@ -55,9 +58,34 @@ function runCheck() {
     }
   }
 
-  if (orphans.length === 0 && titleMismatches.length === 0) {
-    console.log('check: no drift between chapters.json and content/docs/');
+  // (c) Dead internal links. Every page on disk is a valid target, keyed by
+  // its slug path; a link is /ZygiskLab/<slug>/ with optional trailing slash
+  // and anchor.
+  const validTargets = new Set(onDisk.map((p) => p.replace(/\.mdx?$/, '')));
+  for (const p of listMarkdown(docs)) {
+    const rel = relative(docs, p);
+    if (!validTargets.has(rel.replace(/\.mdx?$/, ''))) validTargets.add(rel.replace(/\.mdx?$/, ''));
+  }
+
+  const deadLinks = [];
+  for (const abs of listMarkdown(docs)) {
+    const rel = relative(docs, abs);
+    const body = readFileSync(abs, 'utf8');
+    for (const m of body.matchAll(/\]\((\/ZygiskLab\/[^)#\s]*)/g)) {
+      const target = m[1].slice('/ZygiskLab/'.length).replace(/\/$/, '');
+      if (target === '') continue; // the site root
+      if (!validTargets.has(target)) deadLinks.push({ rel, target });
+    }
+  }
+
+  if (orphans.length === 0 && titleMismatches.length === 0 && deadLinks.length === 0) {
+    console.log('check: no drift between chapters.json and content/docs/, and no dead internal links');
     process.exit(0);
+  }
+
+  if (deadLinks.length) {
+    console.error(`check: ${deadLinks.length} dead internal link(s):`);
+    for (const { rel, target } of deadLinks) console.error(`  - ${rel} -> /ZygiskLab/${target}/`);
   }
 
   if (orphans.length) {

@@ -1,0 +1,6 @@
+id=zygisklab_plthook
+name=ZygiskLab 04 - PLT Hook
+version=1.0
+versionCode=1
+author=Joseph James
+description=Lab 4. Hooks openat() via PLT in one configured process, logs a bounded sample of intercepted calls, and calls through to the original unchanged - with an unhooked control process to prove the scope.

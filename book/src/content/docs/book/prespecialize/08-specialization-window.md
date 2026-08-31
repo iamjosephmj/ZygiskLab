@@ -271,7 +271,7 @@ module from reading it per launch.
 and connected to nothing. Do not connect the companion "just in case". Do not
 open the module directory to see what is in it. Do not log — a log line per
 process is a measurable cost and a large footprint, and
-[Part VI](/ZygiskLab/book/detection/21-what-a-module-leaves-behind/) will have
+[Part VI](/ZygiskLab/book/footprint/21-your-footprint/) will have
 opinions about it.
 
 **Leave nothing behind.** A no-decision should leave the process

@@ -118,5 +118,10 @@ session to see both paths — armed and unarmed — in the same log.
 
 ## Reference rig
 
-Built and tested against Pixel 6 Pro, Android 16, arm64, KernelSU-Next
-3.3.0, Zygisk Next 1.4.5.
+Written for Pixel 6 Pro, Android 16, arm64, KernelSU-Next 3.3.0, Zygisk Next
+1.4.5.
+
+**Not yet run on that rig.** This module compiles and packages cleanly, and
+nothing more than that has been established. Every statement here about what
+it does at runtime is reasoning from the API header and from AOSP, not an
+observation. Treat the expected output as a prediction to be tested.

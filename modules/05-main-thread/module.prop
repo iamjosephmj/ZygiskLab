@@ -1,0 +1,6 @@
+id=zygisklab_mainthread
+name=ZygiskLab 05 - Main Thread
+version=1.0
+versionCode=1
+author=Joseph James
+description=Lab 5. Proves gettid()==getpid() in every callback, then hooks Process.setArgV0() to run a small logged action on the app's real main thread at a moment it chooses, without blocking postAppSpecialize.
