@@ -449,7 +449,7 @@ for (const part of manifest.parts) {
     const order = i + 1;
     const file = join(docs, 'book', part.id, `${c.slug}.md`);
     const labNote = c.lab
-      ? `\n:::note[Lab ${c.lab}]\nThis chapter carries [Lab ${c.lab}](/ZygiskLab/labs/lab-${String(c.lab).padStart(2, '0')}-${manifest.labs.find((l) => l.num === c.lab).slug.split('-').slice(2).join('-')}/).\n:::\n`
+      ? `\n:::note[Lab ${c.lab}]\nThis chapter carries [Lab ${c.lab}](/ZygiskLab/labs/${manifest.labs.find((l) => l.num === c.lab).slug}/).\n:::\n`
       : '';
     write(file, stub({ title: c.title, description: c.description, order, outline: c.outline, labNote }));
     const label = c.num === null ? c.title : `${c.num}. ${c.title}`;
@@ -540,7 +540,7 @@ Then remove the sentinel line before committing.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add book/scripts book/src astro.config.mjs book/astro.config.mjs
+git add book/scripts book/src book/astro.config.mjs
 git commit -m "Generate the sidebar and all chapter and lab stubs from the manifest"
 ```
 
