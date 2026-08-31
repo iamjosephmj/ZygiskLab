@@ -1,0 +1,40 @@
+---
+title: ZygiskLab
+description: Writing Zygisk modules, from hello-world to the traces you leave behind.
+template: splash
+hero:
+  tagline: A book on writing Zygisk modules — from a hello-world that only proves it loaded, to the traces a module leaves and how apps look for them.
+  actions:
+    - text: Start reading
+      link: /ZygiskLab/book/foundations/01-what-zygisk-is/
+      icon: right-arrow
+    - text: GitHub
+      link: https://github.com/iamjosephmj/ZygiskLab
+      icon: external
+      variant: minimal
+---
+
+import { Card, CardGrid } from '@astrojs/starlight/components';
+
+## The spine
+
+Zygisk is a narrow window into a process that has not become an app yet.
+Almost every difficulty is a question of *when* your code runs, so this book
+is organised by execution stage rather than by feature.
+
+<CardGrid>
+  <Card title="Part I — Foundations">What Zygisk is, the rig, and a module that proves it loaded.</Card>
+  <Card title="Part II — The load stage">You are inside zygote. How you got there, and how to deploy without bricking it.</Card>
+  <Card title="Part III — preAppSpecialize">Forked, but not yet an app. The narrowest and most dangerous window.</Card>
+  <Card title="Part IV — postAppSpecialize">You are the app now. JNI, classloaders, hooks, and threads.</Card>
+  <Card title="Part V — The root side">The companion process, and the asymmetry of privilege it exists to solve.</Card>
+  <Card title="Part VI — Footprint">The traces you left at every stage, and how an app looks for them.</Card>
+</CardGrid>
+
+## Authorized use only
+
+This material is for education and for security work on devices and
+applications you own or have written permission to assess. See
+[Rules of Engagement](/ZygiskLab/book/foundations/02-rules-of-engagement/).
+
+Provided as-is, without warranty of any kind.

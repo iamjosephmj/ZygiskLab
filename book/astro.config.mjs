@@ -1,0 +1,23 @@
+// @ts-check
+import { defineConfig } from 'astro/config';
+import starlight from '@astrojs/starlight';
+
+export default defineConfig({
+  site: 'https://iamjosephmj.github.io',
+  base: '/ZygiskLab',
+  integrations: [
+    starlight({
+      title: 'ZygiskLab',
+      description:
+        'Writing Zygisk modules: from hello-world, through injection inside a live app process, to the traces a module leaves behind.',
+      customCss: ['./src/styles/custom.css'],
+      social: [
+        { icon: 'github', label: 'GitHub', href: 'https://github.com/iamjosephmj/ZygiskLab' },
+      ],
+      head: [
+        { tag: 'meta', attrs: { name: 'theme-color', content: '#161616' } },
+      ],
+      sidebar: [],
+    }),
+  ],
+});
