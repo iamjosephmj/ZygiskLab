@@ -96,7 +96,7 @@ Reference rig: Pixel 6 Pro, Android 16, arm64, KernelSU-Next 3.3.0, Zygisk Next 
    ```
 
    `deploy.sh` stages and `mv`s rather than `cp`ing over the live `.so`,
-   restores and verifies the SELinux label, and hashes both sides. It does not
+   sets and verifies the SELinux label, and hashes both sides. It does not
    reboot for you: zygote still has the old library mapped until it does. See
    [Chapter 7](/ZygiskLab/book/load/07-deploying-safely/).
 

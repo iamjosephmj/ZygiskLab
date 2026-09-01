@@ -71,7 +71,7 @@ Reference rig: Pixel 6 Pro, Android 16, arm64, KernelSU-Next 3.3.0, Zygisk Next 
    adb reboot
    ```
 
-   `deploy.sh` pushes to a staging path and `mv`s, restores the SELinux label
+   `deploy.sh` pushes to a staging path and `mv`s, sets the SELinux label explicitly
    and verifies it, and hashes both sides. It does not reboot for you: zygote
    still has the old library mapped until it does. Chapter 7 has the reasoning;
    never `cp` over a live `.so`.

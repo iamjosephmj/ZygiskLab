@@ -45,7 +45,9 @@ The same thing by hand:
 adb push libs/arm64-v8a/libzygisklab.so /data/local/tmp/arm64-v8a.so
 adb shell su -M -c 'mv /data/local/tmp/arm64-v8a.so \
   /data/adb/modules/<id>/zygisk/arm64-v8a.so'
-adb shell su -M -c 'restorecon /data/adb/modules/<id>/zygisk/arm64-v8a.so'
+adb shell su -M -c 'chmod 644 /data/adb/modules/<id>/zygisk/arm64-v8a.so'
+adb shell su -M -c 'chcon u:object_r:system_lib_file:s0 \
+  /data/adb/modules/<id>/zygisk/arm64-v8a.so'
 adb reboot
 ```
 
@@ -58,7 +60,7 @@ the stale mapping, not the file, is what you are fighting:
 ```bash
 md5sum libs/arm64-v8a/libzygisklab.so
 adb shell su -M -c 'md5sum /data/adb/modules/<id>/zygisk/arm64-v8a.so'
-adb shell su -M -c 'ls -Z /data/adb/modules/<id>/zygisk/'   # labels match module.prop
+adb shell su -M -c 'ls -Z /data/adb/modules/<id>/zygisk/'   # .so is system_lib_file
 ```
 
 ## Verify the provider is live

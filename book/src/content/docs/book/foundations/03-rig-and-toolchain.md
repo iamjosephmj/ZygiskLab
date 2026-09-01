@@ -291,12 +291,16 @@ window in which `/data/adb/modules/<id>/zygisk/` does not exist yet, which is
 why a fresh install followed immediately by `deploy.sh` refuses to run —
 [Chapter 7](/ZygiskLab/book/load/07-deploying-safely/) covers that. The second
 is about labels: the installer set the staged `.so`'s SELinux context to
-`u:object_r:system_file:s0` by itself, which is the label the API header says
-the module directory needs for zygote to read it. (`module.prop` in the live
-directory carried `u:object_r:adb_data_file:s0`.) So a manager-installed module
-arrives correctly labelled. That does not make the labelling problem go away —
-a file you push and `mv` into place yourself is a different situation, and
-still needs `restorecon`.
+`u:object_r:system_file:s0` by itself, which is the context the API header names
+when it says the module directory must be readable by zygote. (`module.prop` in
+the live directory carried `u:object_r:adb_data_file:s0`, and the `.so` in a
+live, working module carries a third label again,
+`u:object_r:system_lib_file:s0`.) Three sources, three labels. A file you push
+and `mv` into place yourself lands with the staging path's label, which is none
+of them, so
+[Chapter 7](/ZygiskLab/book/load/07-deploying-safely/) has `deploy.sh` set the
+label explicitly and verify it rather than deriving it with `restorecon` — which
+on this path yields `adb_data_file`.
 
 The Magisk module format defines other paths the *module author* may create,
 none used by Lab 1: `system/`, mounted over `/system`; the `post-fs-data.sh` and

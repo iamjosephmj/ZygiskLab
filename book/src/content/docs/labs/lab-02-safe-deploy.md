@@ -53,9 +53,10 @@ least one of those from memory.
    the `adb push` to `/data/local/tmp` rather than to the module directory;
    the `mv` rather than `cp`; the `sush` helper's `su -M` rather than plain
    `su -c`; the check that `$DEST_DIR` exists *before* anything is staged;
-   the `restorecon || chcon --reference` after the move, followed by reading
-   the label back with `ls -Z` and comparing it against `module.prop`'s
-   label; and the capture-and-compare of both md5 hashes instead of printing
+   the explicit `chcon u:object_r:system_lib_file:s0` after the move, followed
+   by reading the label back with `ls -Z` and failing if it does not match; the
+   fact that every root step is its own `su -M -c` invocation rather than a
+   chain; and the capture-and-compare of both md5 hashes instead of printing
    them for you to eyeball.
 
 3. **Deploy.**
@@ -81,23 +82,21 @@ least one of those from memory.
    ABI, not the library name), or the `su -M` command itself erroring. Note
    the md5 the script printed; you will want it later.
 
-5. **See what the label check verified.** `deploy.sh` already read the `.so`'s
-   label back with `ls -Z` and compared it against `module.prop`'s label,
-   failing loudly on a mismatch. `module.prop` is the correct reference
-   because the manager wrote it in place when it installed the module, so its
-   label is exactly what this provider's policy assigns to files belonging to
-   this module. Look at it yourself once, so you recognise it later without a
-   script checking for you:
+5. **See what the label check verified.** `deploy.sh` set the `.so`'s label to
+   `u:object_r:system_lib_file:s0` with `chcon`, read it back with `ls -Z`, and
+   failed loudly if it did not match. Look at it yourself once, so you
+   recognise it later without a script checking for you:
 
    ```bash
    adb shell su -M -c 'ls -Z /data/adb/modules/zygisklab_hello/zygisk/'
    ```
 
-   The `.so` and `module.prop` should carry the same label — if the deploy
-   succeeded, they already do. This is the "listed but silent" failure from
-   Chapter 4's catalogue: a mismatched label produces a module that is
-   present, correctly named, correctly sized, hash-identical to your build,
-   and simply never loads, with nothing in any log to say why.
+   Note that `module.prop` next to it carries a *different* label,
+   `u:object_r:adb_data_file:s0`, and that is expected — see the verified
+   result below and
+   [Chapter 7](/ZygiskLab/book/load/07-deploying-safely/) for why the label is
+   pinned explicitly rather than restored, and for what a wrong label does and
+   does not cause.
 
 6. **Test without rebooting, and expect nothing to change.**
 
@@ -106,7 +105,7 @@ least one of those from memory.
    ```
 
    Launch the target app. You should see the **old** `onLoad` string, not
-   `build 2`. This is the correct and boring outcome, and it is worth seeing
+   `build 2`. This was observed on the rig — see the verified result below. This is the correct and boring outcome, and it is worth seeing
    once: a perfect deploy changes nothing until the loader runs again.
 
 7. **Reboot, then confirm.**
@@ -117,6 +116,74 @@ least one of those from memory.
 
    Wait for boot, clear the log, launch the app again. Now `build 2` appears.
    You have a deploy path whose failure modes are all loud.
+
+## Verified result — Part A only
+
+Part A was run on the reference rig: Pixel 6 Pro, Android 16, arm64,
+KernelSU-Next 3.3.0, Zygisk Next 1.4.5. The build strings used were `BUILD-2`
+and `BUILD-3` rather than `build 2` and `build 3`; nothing else differed.
+
+**Part B has not been run.** Everything in the Part B section below remains a
+prediction, including the crash signature, the armed/unarmed asymmetry and the
+recovery. Its spare-device warning stands unchanged and should be read as
+written.
+
+### The mapped-library claim: confirmed
+
+1. `BUILD-2` was deployed by the stage-then-rename path and the device
+   rebooted. Newly launched apps logged `BUILD-2`.
+2. `BUILD-3` was built and deployed the same way — `adb push`, then `mv`,
+   `chmod`, `chcon`, each as its own `su -M -c` invocation — and the hash and
+   SELinux label were verified on disk. **No reboot.** Newly launched apps
+   still logged `BUILD-2`.
+3. The device was rebooted. Newly launched apps logged `BUILD-3`.
+
+That is step 6 and step 7 of this lab, observed. A correct deploy, confirmed
+correct on disk by hash, changed nothing until zygote restarted. The old
+mapping is what runs, and there is no way to make a newly forked app pick up
+the new library short of restarting zygote.
+
+### The SELinux label claim: falsified
+
+This lab and Chapter 7 previously told you that a mislabelled `.so` would be
+silently refused by the loader. That was tested and it is wrong. The `.so` was
+left carrying `u:object_r:adb_data_file:s0` and the device rebooted; the module
+**loaded and ran normally**, producing 69 log lines across app launches,
+including `onLoad`, `preAppSpecialize` and `postAppSpecialize`.
+
+The accurate, narrower statement is that the Zygisk API header requires the
+*module directory* to be readable by zygote — it names `system_file` context —
+because of SELinux restrictions on the descriptor `Api::getModuleDir()` hands
+over a socket. That is about directory access through that call, not about
+whether the library loads. Module 01 does not call `getModuleDir()`, so this run
+says nothing about that case; it remains **untested**. Modules 03 and 06 do call
+it, so a later lab can settle it.
+
+One device, one provider, one version. This disproves a general claim; it does
+not prove that no label ever matters.
+
+### Three labels, measured
+
+| Source | Label |
+|---|---|
+| `restorecon` under `/data/adb/modules` | `u:object_r:adb_data_file:s0` |
+| Working modules' `zygisk/*.so` on the device | `u:object_r:system_lib_file:s0` |
+| `ksud module install`, freshly staged `.so` | `u:object_r:system_file:s0` |
+
+The middle row was checked across `zygiskcamera`, `zygisk_vector` and
+`hma_oss_zygisk`. So `restorecon` is the wrong tool here, and so is
+`chcon --reference=module.prop`, because `module.prop` in the live directory is
+`adb_data_file` too. `deploy.sh` in all five modules has been corrected to set
+`WANT_LABEL="u:object_r:system_lib_file:s0"` explicitly with `chcon` and fail if
+the label does not read back, and was re-run on the device afterwards, reporting
+a matching hash and the correct label.
+
+### A chained root command failed
+
+Chaining `mv` and `chmod` behind a single `su -M -c` produced
+`chmod: Permission denied` immediately after the `mv` succeeded. The identical
+`chmod`, issued seconds later as a separate invocation, worked. The cause was
+not established. `deploy.sh` now runs each step as its own invocation.
 
 ### Part B — reproduce the corruption, once
 
@@ -202,14 +269,14 @@ safe, which is the difference between a safe deploy and a lucky one.
    different problem from a failed deploy, and one you can only distinguish
    because you checked both.
 
-2. **Can you say why `module.prop` — specifically that file, not "the zygisk
-   directory" or "a module you didn't deploy by hand" — is the correct
-   reference for the label check?** If your answer is "because the script
-   compares against it," you have trusted the check without understanding it.
-   The real answer is that the manager wrote `module.prop` in place at
-   install time, so its label is exactly what this provider's policy assigns
-   to this module's files — the one label in that directory guaranteed not to
-   have drifted.
+2. **Can you say why the label is set to a literal
+   `u:object_r:system_lib_file:s0` rather than derived with `restorecon` or
+   copied from `module.prop`?** If your answer is "because the script does
+   it," you have trusted the check without understanding it. The real answer
+   is measured: both of those derive `adb_data_file`, which is not the label
+   any working module's library carries on this device. And you should be able
+   to say what the rig showed a wrong label does *not* cause — it did not stop
+   the module loading.
 
 3. **Did you see the crash yourself, with the fault surfacing in the provider's
    library rather than in your own frames?** Reading step 11 is not the same as

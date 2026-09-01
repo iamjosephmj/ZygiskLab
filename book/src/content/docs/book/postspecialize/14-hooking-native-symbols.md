@@ -348,8 +348,8 @@ whose `nice_name` is not the package name — all present as total silence.
 
 **2. Did the module load at all?** No `preAppSpecialize` line means this is a
 deployment or loader problem, not a hooking problem. Go back to
-[Chapter 7](/ZygiskLab/book/load/07-deploying-safely/): wrong SELinux label, `.so`
-copied in place over a mapped file, no reboot after deploy.
+[Chapter 7](/ZygiskLab/book/load/07-deploying-safely/): `.so` copied in place
+over a mapped file, no reboot after deploy, wrong ABI file name.
 
 **3. Did `pltHookCommit()` return true?** You logged it, so read it. `false`
 means the hook was never installed and every question below is moot. Check that

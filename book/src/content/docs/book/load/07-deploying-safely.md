@@ -215,10 +215,11 @@ and fails on a mismatch, so the diagnostic you just learned to run manually
 after a crash also runs automatically at deploy time, before you have spent a
 test cycle on a build that never landed.
 
-The third — verifying that the SELinux label actually took, rather than only
-attempting to restore it — is worth its own explanation, because the failure
-it guards against is the quietest one in this chapter. The next section covers
-it.
+The third — pinning the SELinux label to a known value and verifying it took,
+rather than running a relabel command and assuming — is worth its own
+explanation, both because the obvious tools produce the wrong answer and because
+this book previously got the reason for the check wrong. The SELinux section
+below covers what the rig actually showed.
 
 ### Why the reboot is not superstition
 
@@ -270,83 +271,118 @@ needs to reason about which filesystem view it is standing in, and Part VI
 returns to them again, because the namespace difference between an injected
 process and a clean one is itself something an app can measure.
 
-## SELinux labels: the silent failure
+## SELinux labels: a claim this book got wrong
 
-There is one more thing `mv` does not do, and it produces the nastiest outcome
-in this chapter because it produces no crash at all.
+This section previously told you that a mislabelled `.so` would be silently
+refused by the loader — that the file would sit in the module directory,
+correctly named, hash-identical to your build, and never load. Lab 2 Part A was
+run on the reference rig to check that, and it is not what happens. The
+correction is below, because a book that only reports its confirmations is not
+worth the rig time.
 
-Every file carries an SELinux security context. A newly created file normally
-inherits a label derived from the directory it is created in. A renamed file
-does not: `rename` preserves the source file's label, so a `.so` staged through
-`/data/local/tmp` arrives in the module directory still labelled as a temp
-file. `chmod` will not help — mode bits and labels are independent mechanisms,
-and the policy is checked separately from and in addition to the mode.
+**What was tested.** The module's `.so` was left carrying
+`u:object_r:adb_data_file:s0` — the label a staged file picks up, not the label
+the provider's own modules carry — and the device was rebooted. The module
+loaded and ran normally: 69 `ZygiskLab` lines across app launches, including
+`onLoad`, `preAppSpecialize` and `postAppSpecialize`. On this rig, with this
+provider, a `.so` labelled `adb_data_file` is opened and executed by the loader
+without complaint.
 
-A provider running under a domain that is permitted to read module files but
-not `/data/local/tmp`'s label simply cannot open yours. The result is a module
-that is present, correctly named, correctly sized, hashes identical to your
-build — and never loads. No error in your log, because your code never ran. No
-crash. Possibly nothing in the provider's log either. This is precisely the
-"listed but silent" failure from Chapter 4's catalogue, and if you do not know
-about labels you will chase it through `module.prop`, ABI naming and scope
-configuration first.
+That is one device, one provider, one version — Pixel 6 Pro, Android 16, arm64,
+KernelSU-Next 3.3.0, Zygisk Next 1.4.5 — and it does not prove that no label can
+ever cause a refusal. It does disprove the book's own claim, which was stated
+generally, and a general claim falls to a single counterexample.
 
-The fix is one command after the move:
+**Where the wrong claim came from.** The Zygisk API header documents that the
+*module directory* must be readable by zygote, and names `system_file` context
+in doing so, because of SELinux restrictions on the descriptor
+`Api::getModuleDir()` hands over a socket. That is a statement about **access to
+the module directory through that descriptor**, not about whether the library
+loads. This book over-generalised it into a claim about loading. The narrower
+statement is the accurate one.
+
+:::note
+Module 01 never calls `getModuleDir()`, so this run says nothing about the
+`getModuleDir` case. Whether a mislabelled module directory breaks that call
+remains **untested**. Modules 03 and 06 do call it, so a later lab can settle
+it. Until then, treat the header's directory-context requirement as documented
+but unverified here, not as disproven.
+:::
+
+### Three labels, all different
+
+The label question is still real; it is just not a loading question. What the
+run measured is that there is no single "correct" label you can derive by
+convention, because three plausible sources give three different answers.
+
+| Where it comes from | Label observed |
+|---|---|
+| `restorecon` on a file under `/data/adb/modules` | `u:object_r:adb_data_file:s0` |
+| The provider's own working modules' `zygisk/*.so` | `u:object_r:system_lib_file:s0` |
+| `ksud module install` staging a fresh `.so` | `u:object_r:system_file:s0` |
+
+The middle row is the one to match: every working module's `zygisk/*.so` on the
+device carried `u:object_r:system_lib_file:s0`, checked across `zygiskcamera`,
+`zygisk_vector` and `hma_oss_zygisk`. Three modules is three samples, but they
+agree with each other and they disagree with both of the labels you would get by
+automated means.
+
+So two pieces of earlier advice in this book were wrong, and both are now
+withdrawn:
+
+- **`restorecon` is the wrong tool here.** It re-derives the label from the
+  file-context policy for the path, and for a path under `/data/adb/modules`
+  that policy says `adb_data_file`. It will run, exit `0`, and leave you with a
+  label no working module carries.
+- **`chcon --reference=module.prop` is the wrong fallback.** `module.prop` in
+  the live module directory is `adb_data_file` too, so referencing it reproduces
+  exactly the same wrong answer with more ceremony. This book previously argued
+  that `module.prop` was the ground truth because the manager wrote it in place;
+  the manager did write it in place, and it is still not the label the libraries
+  carry.
+
+The rule that survives:
+
+**Set the label explicitly, then read it back and fail if it does not match.**
 
 ```bash
-restorecon /data/adb/modules/<id>/zygisk/arm64-v8a.so
+adb shell su -M -c 'chcon u:object_r:system_lib_file:s0 \
+  /data/adb/modules/<id>/zygisk/arm64-v8a.so'
+adb shell su -M -c 'ls -Z /data/adb/modules/<id>/zygisk/arm64-v8a.so'
 ```
 
-`restorecon` re-derives the label from the system's file-context policy for
-that path. Where it is unavailable, copying the neighbouring directory's label
-explicitly is the fallback:
+`deploy.sh` in every module now does this: it sets
+`WANT_LABEL="u:object_r:system_lib_file:s0"` with `chcon`, reads the label back,
+and fails the run if it does not match. Verification is the load-bearing half —
+a `chcon` that quietly did nothing is indistinguishable from one that worked
+until you look.
+
+Note what this check is now for. It is not "otherwise the module will not load",
+because on this rig it loads. It is that a file whose label differs from every
+other module's library on the device is a difference you did not intend, in a
+mechanism you do not fully control, and the cost of pinning it is one command.
+Deploy hygiene, not a fix for a failure the rig actually reproduced.
+
+### One `su -M -c` per step
+
+A practical note from the same run, cause not established. Chaining the move and
+the mode change behind a single invocation failed:
 
 ```bash
-chcon --reference=/data/adb/modules/<id>/zygisk \
-      /data/adb/modules/<id>/zygisk/arm64-v8a.so
+# fails: "chmod: Permission denied", immediately after the mv
+adb shell su -M -c 'mv /data/local/tmp/arm64-v8a.so \
+  /data/adb/modules/<id>/zygisk/arm64-v8a.so && chmod 644 \
+  /data/adb/modules/<id>/zygisk/arm64-v8a.so'
 ```
 
-This is exactly why `modules/01-hello-zygisk/deploy.sh` runs
-`restorecon || chcon --reference=...` immediately after its `mv`. Read that
-script's header comment — it is the short form of this chapter, kept next to
-the code it explains.
+The identical `chmod`, issued seconds later as its own `su -M -c` invocation,
+succeeded. Nothing about the file changed in between. Whether this is a
+namespace-timing effect inside the root shell, something the provider does to
+the directory after a write, or something else entirely was not determined.
 
-Whether a mislabelled file actually fails is policy-dependent and therefore
-device- and provider-dependent; on a permissive build or a policy that happens
-to allow the transition, it may load fine. That variability is an argument for
-always relabelling rather than for testing whether you need to — and, just as
-important, for verifying that the relabel actually took rather than assuming
-`restorecon` (or its `chcon` fallback) did its job. `restorecon || chcon` can
-fall through silently: if both legs fail quietly, or the fallback references
-the wrong path, you get no error and a label that is still wrong.
-
-`deploy.sh` does not stop at running the relabel command. It reads the label
-back with `ls -Z` and compares it against the label on `module.prop`, in the
-same module directory. `module.prop` is the correct reference, not an
-arbitrary stand-in: it is the one file in that directory the manager itself
-wrote, in place, at install time, so its label is exactly what this provider's
-policy assigns to files belonging to this module — the ground truth for what
-your `.so` should carry, on this device, under this provider. Comparing
-against a module you happened not to deploy by hand is a reasonable proxy;
-comparing against `module.prop` in the *same* module is the actual answer,
-because it cannot have drifted from whatever this install's policy expects.
-
-A mismatch here is a direct hit on the "listed but silent" failure from
-Chapter 4's catalogue: the module shows up in your manager, the file is
-present, correctly named, correctly sized, and hash-identical to your build —
-and never loads, with nothing in any log to tell you why. `deploy.sh` turns
-that silent failure into a loud one at deploy time: it fails the run and
-prints both labels, so you find out before you go looking for the bug in the
-wrong place. You can still see what it checked with your own eyes:
-
-```bash
-adb shell su -M -c 'ls -Z /data/adb/modules/<id>/zygisk/'
-```
-
-but by the time the script has exited `0`, the `.so` and `module.prop` already
-carry the same label — that comparison is no longer something you need to
-perform to trust the deploy, only something worth doing once so you recognise
-the label yourself.
+The working rule is mechanical: **run each root step as its own invocation.**
+`deploy.sh` does. It costs a few `adb shell` round-trips and removes a failure
+whose cause nobody on this rig can currently explain.
 
 ## The general rule
 
@@ -384,9 +420,10 @@ diagnose a deploy that goes wrong, whether or not the script is what ran it.
    a wrong `id` in `module.prop` is a silent failure otherwise.
 3. `adb push` to `/data/local/tmp`.
 4. `su -M -c mv` into the module directory. Never `cp`.
-5. `chmod 644` and `restorecon` (or `chcon --reference`), then read the label
-   back and compare it against `module.prop`'s label — don't just trust that
-   the relabel command succeeded.
+5. `chmod 644`, then `chcon u:object_r:system_lib_file:s0` — not `restorecon`,
+   not `chcon --reference=module.prop`, both of which yield `adb_data_file` —
+   and read the label back, failing if it does not match. Each of these as its
+   own `su -M -c` invocation.
 6. `md5sum` both sides and fail on a mismatch, rather than printing the two
    hashes for a human to eyeball.
 7. `adb reboot`. Then clear the log and reproduce.
@@ -395,14 +432,31 @@ diagnose a deploy that goes wrong, whether or not the script is what ran it.
 That last line is the one that pays. The crash signature described in this
 chapter — SIGSEGV during app specialization, faulting inside the provider,
 armed apps only — is indistinguishable by inspection from several real module
-bugs, and so, by symptom, are a missing destination directory and a stale
-SELinux label: all three produce a module that looks installed and never
-runs. The hash tells the crash apart from a stale mapping in two seconds, and
+bugs, and so, by symptom, is a missing destination directory: both produce a
+module that looks installed and never runs. The hash tells the crash apart from a stale mapping in two seconds, and
 only if you check it before you have already convinced yourself of a story.
 
-This chapter is marked unverified: the mechanism is drawn from the behaviour of
-`cp`, `rename` and `mmap`, and the crash signature from observation on the rig,
-but nothing on this page has been re-run for this write-up. The claims worth
-testing yourself are the selective ones — that unarmed apps survive, and that a
-reboot clears a crash whose hashes matched. [Lab 2](/ZygiskLab/labs/lab-02-safe-deploy/)
+## What has been run, and what has not
+
+Lab 2 Part A has now been run on the reference rig, and it settles the central
+claim of this chapter directly. A second build of Module 01, its `onLoad` string
+changed to `BUILD-2`, was deployed by the stage-then-rename path and the device
+rebooted; apps logged `BUILD-2`. A third build, `BUILD-3`, was then deployed the
+same way — push, `mv`, `chmod`, `chcon` — with the hash and label verified on
+disk and **no reboot**. Newly launched apps kept logging `BUILD-2`. After a
+reboot, they logged `BUILD-3`.
+
+That is the mapped-library claim, observed rather than argued: zygote holds the
+old mapping, a correct deploy has no effect until zygote restarts, and a newly
+forked app inherits the old code no matter what the file on disk says. It is
+also why the hash check cannot answer "is my code broken?" on its own — a
+matching hash was exactly the state in which the device was still running the
+previous build.
+
+The corruption half of this chapter has **not** been re-run. The `cp` mechanism
+is drawn from the behaviour of `cp`, `rename` and `mmap`, and the crash
+signature from earlier observation on the rig, but neither the selective crash
+nor the reboot recovery was reproduced for this write-up. Those are the claims
+worth testing yourself — that unarmed apps survive, and that a reboot clears a
+crash whose hashes matched. [Lab 2](/ZygiskLab/labs/lab-02-safe-deploy/) Part B
 has you reproduce both, deliberately, on a device you can afford to lose.

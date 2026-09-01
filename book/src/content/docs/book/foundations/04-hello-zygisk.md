@@ -346,10 +346,10 @@ The same reasoning explains why iterating on a module is not a matter of
 copying a new `.so` over the old one. Zygote holds the file mapped; rewriting
 that inode changes pages under executing code. `deploy.sh` in the module
 directory pushes to a staging path and `mv`s — an atomic rename gives a new
-inode and leaves existing mappings intact — then fixes the SELinux label,
-because `mv` carries the label of where the file came from and a mismatched
-label makes the loader refuse the file silently. Then it still tells you to
-reboot. Chapter 7 and [Lab 2](/ZygiskLab/labs/lab-02-safe-deploy/) are entirely
+inode and leaves existing mappings intact — then pins the SELinux label,
+because `mv` carries the label of where the file came from and you want the
+label your `.so` ends up with to be the one you chose rather than an accident of
+the staging path. Then it still tells you to reboot. Chapter 7 and [Lab 2](/ZygiskLab/labs/lab-02-safe-deploy/) are entirely
 about this.
 
 Enable the module for your target app in your manager's Zygisk scope list, if
@@ -396,10 +396,15 @@ the manager's own install log.
 
 **Listed, enabled, rebooted — and silent.** No `ZygiskLab` lines at all. Work
 outward from the least likely. Confirm the file is where the manager put it and
-readable: `ls -lZ /data/adb/modules/zygisklab_hello/zygisk/` under `su -M`, and
-look at the SELinux label as well as the mode — a wrong label is the classic
-silent refusal, and it is exactly what `deploy.sh`'s `restorecon` exists to
-prevent. Confirm the ABI filename matches the device's zygote. Confirm Zygisk
+readable: `ls -lZ /data/adb/modules/zygisklab_hello/zygisk/` under `su -M`.
+Check the mode. Do *not* stop at the SELinux label: an earlier edition of this
+book listed a mislabelled `.so` as the classic silent refusal, and Lab 2 Part A
+disproved that on the rig — a `.so` left as `u:object_r:adb_data_file:s0` loaded
+and ran normally. `deploy.sh` still pins the label, but for consistency rather
+than because a wrong one is known to stop the load, and a label mismatch is not
+a diagnosis for this symptom. See
+[Chapter 7](/ZygiskLab/book/load/07-deploying-safely/) for what was measured.
+Confirm the ABI filename matches the device's zygote. Confirm Zygisk
 itself is enabled in the manager, and that your app is in scope. If `onLoad`
 never prints, the loader either never opened your library or refused it at
 `registerModule` — an API version mismatch returns early and produces no output

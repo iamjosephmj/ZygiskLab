@@ -8,10 +8,10 @@ status: unverified
 
 Zygisk fails silently. That is the recurring finding of this whole book: a call
 into a slot the provider never implemented, a correctly-written call made in the
-wrong callback, a `.so` with the wrong SELinux label, and a module that was never
-loaded at all are, from outside, the same event — nothing happens and nothing
-says why. Chapter 4's silence, Chapter 6's absent ABI, Chapter 7's stale label
-and Chapter 10's ignored `setOption` all present identically in your logcat.
+wrong callback, and a module that was never loaded at all are, from outside, the
+same event — nothing happens and nothing says why. Chapter 4's silence,
+Chapter 6's absent ABI and Chapter 10's ignored `setOption` all present
+identically in your logcat.
 
 So this appendix is not a list of causes. It is a set of **discriminators**: for
 each symptom, the one check that tells otherwise-identical causes apart, and the
@@ -47,7 +47,7 @@ so it is a packaging problem, never a code problem.
 `adb logcat -s ZygiskLab` prints nothing at all. Not from `onLoad`, not from
 either specialize callback.
 
-This is the single most overloaded symptom in the book. At least seven distinct
+This is the single most overloaded symptom in the book. At least six distinct
 causes produce exactly it.
 
 **Likely causes**, cheapest first:
@@ -57,13 +57,11 @@ causes produce exactly it.
 2. Your app is not in the provider's scope list.
 3. Wrong ABI: you shipped `arm64-v8a.so` and the process was forked from a
    32-bit zygote.
-4. Wrong SELinux label on the `.so` — present, correctly named, hash-identical,
-   and unopenable.
-5. A `DT_NEEDED` dependency that does not resolve in your linker namespace, so
+4. A `DT_NEEDED` dependency that does not resolve in your linker namespace, so
    `dlopen` fails outright.
-6. An API version the provider refuses: `registerModule` returns early and
+5. An API version the provider refuses: `registerModule` returns early and
    `onLoad` is never called.
-7. You deployed correctly and did not reboot, so zygote is still running the old
+6. You deployed correctly and did not reboot, so zygote is still running the old
    mapping — or has never mapped anything.
 
 **The discriminators**, in the order that eliminates the most per check:
@@ -90,11 +88,13 @@ you have already found your bug. Total silence in every process is not this.
 adb shell su -M -c 'ls -Z /data/adb/modules/<id>/zygisk/'
 ```
 
-Compare the `.so`'s label against `module.prop`'s label in the same directory.
-`module.prop` is the right reference because the manager wrote it in place at
-install time, so it carries exactly what this provider's policy assigns to this
-module's files. A mismatch is Chapter 7's silent refusal, and it is what
-`restorecon` after the `mv` exists to prevent.
+Worth a look, but **not** a discriminator for this symptom, and earlier editions
+of this book said otherwise. On the reference rig a `.so` left as
+`u:object_r:adb_data_file:s0` loaded and ran normally, so a label that differs
+from the `u:object_r:system_lib_file:s0` the provider's own modules carry is an
+untidy deploy rather than an explanation for total silence. See
+[Chapter 7](/ZygiskLab/book/load/07-deploying-safely/). Fix the label anyway;
+keep looking for the cause.
 
 ```bash
 readelf -d libzygisklab.so | grep NEEDED
