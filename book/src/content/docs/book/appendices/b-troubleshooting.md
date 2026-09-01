@@ -256,12 +256,16 @@ Work down this list in order; each step separates two hypotheses.
 2. **Did the module load at all?** No `preAppSpecialize` line makes this a
    deployment problem, not a hooking problem — go back to the `md5sum` check.
 3. **Did `pltHookCommit()` return `true`?** You logged it; read it. `false` means
-   the hook was never installed. Check `findLibc()` succeeded first.
-4. **Is the original non-null?** A null original after a successful commit means
-   the symbol was registered and no matching import was found — that points at
-   the symbol name or the target library, not the mechanism.
-5. **Is the symbol actually imported by that ELF?** `llvm-readelf --dyn-syms` and
-   look for a `UND` entry. Internal calls, inlined calls, statically linked
+   the hook was never installed — and, measured on the reference rig, it means
+   specifically that the ELF you targeted has no PLT entry for that symbol.
+   (An empty registration list returns `true`, which is how the two were told
+   apart.) Check `findTargetLib()` succeeded first.
+4. **Does that ELF actually import the symbol?** `llvm-readelf -r <lib> | grep
+   <symbol>` on the library pulled off the device. No relocation, no slot. The
+   classic error is targeting the library that *defines* the symbol — `libc.so`
+   for anything in libc — which can never work; find an importer instead.
+5. **Is the original non-null?** A null original after a successful commit means
+   the commit had nothing to do. Internal calls, inlined calls, statically linked
    copies and raw syscalls have no PLT slot and never had one. This is the step
    where an empty log turns out to be correct behaviour.
 6. **Did the call happen before your commit?** Log a timestamp at commit and

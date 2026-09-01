@@ -74,7 +74,7 @@ static void readTarget(Api *api, char *out, size_t outSize) {
 // be readable by zygote itself, and libc is already mapped because zygote
 // (the process this one was just forked from) linked against it long
 // before this module ever loaded.
-static bool findLibc(dev_t *devOut, ino_t *inodeOut) {
+static bool findTargetLib(dev_t *devOut, ino_t *inodeOut) {
     FILE *f = fopen("/proc/self/maps", "r");
     if (!f) {
         LOGW("could not open /proc/self/maps");
@@ -100,7 +100,7 @@ static bool findLibc(dev_t *devOut, ino_t *inodeOut) {
             path[--len] = '\0';
         }
         if (len == 0) continue;
-        static constexpr const char *kSuffix = "/libc.so";
+        static constexpr const char *kSuffix = "/libandroid_runtime.so";
         size_t suffixLen = strlen(kSuffix);
         if (len >= suffixLen && strcmp(path + len - suffixLen, kSuffix) == 0) {
             *devOut = makedev((unsigned) devMajor, (unsigned) devMinor);
@@ -127,14 +127,28 @@ static bool findLibc(dev_t *devOut, ino_t *inodeOut) {
 //    below does a bounded amount of work (a counter check and, rarely, one
 //    log line) and then tail-calls the original with its arguments passed
 //    through unchanged. It cannot change which file gets opened, with what
-//    flags, or what openat() returns - this module observes, it does not
+//    flags, or what open() returns - this module observes, it does not
 //    alter behaviour.
 //
-// access() or stat() were the other candidates in this family; openat()
-// wins because it is the one every open path actually funnels through,
-// where the others are called selectively.
-using OpenatFn = int (*)(int, const char *, int, mode_t);
-static OpenatFn orig_openat = nullptr;
+// Why open() and not openat(), which looks like the better target: a PLT
+// hook can only rewrite a call that crosses a PLT, and openat() is almost
+// never called that way. Bionic implements open() as a call to openat()
+// *inside libc*, so that call never crosses a PLT boundary and is
+// invisible to this technique. Measured on the reference rig,
+// libandroid_runtime.so, libutils.so and libbase.so contain zero
+// relocations for openat; only libc++.so has one, and it is not exercised
+// during an ordinary app launch. Registering openat against libc.so is
+// worse still: libc *defines* the symbol rather than importing it, so
+// there is no PLT entry to rewrite and pltHookCommit() returns false.
+//
+// open() is imported by libandroid_runtime.so, which practically every app
+// process loads - 125 of 126 app-uid processes on the reference rig had it
+// mapped - and which opens the app's APKs during startup, so the hook has
+// something real to intercept. "Practically every" is the honest phrasing:
+// one process in that sample did not, so do not assume it without checking
+// the process you actually care about. See chapter 14.
+using OpenFn = int (*)(const char *, int, mode_t);
+static OpenFn orig_open = nullptr;
 
 // Set once, from preAppSpecialize, before the hook can possibly fire -
 // the hook only starts intercepting calls after pltHookCommit() returns,
@@ -180,18 +194,18 @@ static std::atomic<int> loggedCalls{0};
 // It would not be safe if the replacement inspected, logged or acted on
 // `mode`. If you adapt this hook and start caring about that argument, read
 // it out of a va_list properly instead of taking it as a fixed parameter.
-static int my_openat(int fd, const char *path, int flags, mode_t mode) {
+static int my_open(const char *path, int flags, mode_t mode) {
     if (reentryDepth == 0) {
         int seen = loggedCalls.fetch_add(1, std::memory_order_relaxed);
         if (seen < kLogCap) {
             reentryDepth++;
-            LOGI("openat: pid=%d proc=%s path=%s flags=0x%x [%d/%d logged]",
+            LOGI("open: pid=%d proc=%s path=%s flags=0x%x [%d/%d logged]",
                  getpid(), armedProcessName, path ? path : "(null)", flags,
                  seen + 1, kLogCap);
             reentryDepth--;
         } else if (seen == kLogCap) {
             reentryDepth++;
-            LOGI("openat: proc=%s further calls suppressed after %d logged calls",
+            LOGI("open: proc=%s further calls suppressed after %d logged calls",
                  armedProcessName, kLogCap);
             reentryDepth--;
         }
@@ -199,7 +213,7 @@ static int my_openat(int fd, const char *path, int flags, mode_t mode) {
     // Call through unconditionally, with the original arguments, and
     // return exactly what it returns. This is the part that makes the
     // hook an observer instead of a behaviour change.
-    return orig_openat(fd, path, flags, mode);
+    return orig_open(path, flags, mode);
 }
 
 // Lab 4: hook a libc symbol in one target app, log it, and hand back an
@@ -252,15 +266,15 @@ public:
         // Application/attachBaseContext are covered too.
         dev_t dev;
         ino_t inode;
-        if (!findLibc(&dev, &inode)) {
-            LOGW("preAppSpecialize: pid=%d proc=%s could not locate libc.so in "
-                 "/proc/self/maps; hook NOT installed", getpid(), armedProcessName);
+        if (!findTargetLib(&dev, &inode)) {
+            LOGW("preAppSpecialize: pid=%d proc=%s could not locate libandroid_runtime.so "
+                 "in /proc/self/maps; hook NOT installed", getpid(), armedProcessName);
             env->ReleaseStringUTFChars(args->nice_name, name);
             return;
         }
 
-        api->pltHookRegister(dev, inode, "openat", (void *) my_openat,
-                              (void **) &orig_openat);
+        api->pltHookRegister(dev, inode, "open", (void *) my_open,
+                              (void **) &orig_open);
 
         // Check and report the result. pltHookCommit() returns bool, and
         // silently ignoring "false" here is the single most confusing way
@@ -270,11 +284,11 @@ public:
         // success or failure explicitly instead of assuming it worked.
         bool committed = api->pltHookCommit();
         if (committed) {
-            LOGI("preAppSpecialize: pid=%d proc=%s ARMED, openat() hook committed",
+            LOGI("preAppSpecialize: pid=%d proc=%s ARMED, open() hook committed",
                  getpid(), armedProcessName);
         } else {
             LOGW("preAppSpecialize: pid=%d proc=%s ARMED, but pltHookCommit() "
-                 "FAILED - openat() is NOT hooked in this process", getpid(),
+                 "FAILED - open() is NOT hooked in this process", getpid(),
                  armedProcessName);
         }
 

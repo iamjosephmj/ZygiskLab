@@ -3,7 +3,7 @@ title: "Hooking native symbols"
 description: "Lab 4: PLT/GOT hooking with pltHookRegister and pltHookCommit, what a PLT hook cannot reach, and debugging a silent hook."
 sidebar:
   order: 3
-status: unverified
+status: proven
 ---
 
 Everything so far has been about position: getting loaded, arming for the right
@@ -19,10 +19,17 @@ failure mode for that blindness is an empty log rather than an error. Half this
 chapter is the mechanism; the other half is the boundary of what it can reach and
 how to tell "not hooked" from "not called".
 
+The earlier edition of this chapter got its own worked example wrong, in a way
+that the "what a PLT hook cannot reach" section below already predicted. That is
+recorded here rather than quietly fixed, because the mistake teaches the
+chapter's central point better than the correct answer does. It is
+[described in full](#the-mistake-this-chapter-made) once you have the mechanism
+to read it with.
+
 ## The table in the middle of the call
 
 When a shared library calls a function it does not itself define — `libfoo.so`
-calling `openat`, which lives in `libc.so` — the compiler cannot emit a direct
+calling `open`, which lives in `libc.so` — the compiler cannot emit a direct
 branch. The address is not known at compile time, and it is not known at link
 time either: it depends on where the dynamic linker maps `libc.so` in this
 particular process. So the call is made indirectly, through a table that the
@@ -37,8 +44,8 @@ stub jumps to. The stub is code; the slot is data the linker writes.
   BEFORE
                      libfoo.so                       libc.so
   ┌────────────┐    ┌──────────────┐   ┌──────────┐  ┌───────────────┐
-  │ call site  │───▶│ PLT stub for │──▶│ GOT slot │─▶│ openat()      │
-  │ openat(..) │    │ openat       │   │ 0x7f…a10 │  │ real function │
+  │ call site  │───▶│ PLT stub for │──▶│ GOT slot │─▶│ open()        │
+  │ open(..)   │    │ open         │   │ 0x7f…a10 │  │ real function │
   └────────────┘    └──────────────┘   └──────────┘  └───────────────┘
                                             ▲
                                    dynamic linker wrote
@@ -47,19 +54,19 @@ stub jumps to. The stub is code; the slot is data the linker writes.
   AFTER pltHookCommit()
                      libfoo.so                       your module
   ┌────────────┐    ┌──────────────┐   ┌──────────┐  ┌───────────────┐
-  │ call site  │───▶│ PLT stub for │──▶│ GOT slot │─▶│ my_openat()   │
-  │ openat(..) │    │ openat       │   │ 0x7d…c40 │  │               │
+  │ call site  │───▶│ PLT stub for │──▶│ GOT slot │─▶│ my_open()     │
+  │ open(..)   │    │ open         │   │ 0x7d…c40 │  │               │
   └────────────┘    └──────────────┘   └──────────┘  └──────┬────────┘
                                                             │ tail-call
                                                             ▼
                                                      ┌───────────────┐
-                                                     │ openat()      │
+                                                     │ open()        │
                                                      │ real function │
                                                      └───────────────┘
 ```
 
 That is the entire idea. You do not patch `libc.so`. You do not rewrite the first
-instructions of `openat`. You change one pointer in the caller's table, so that
+instructions of `open`. You change one pointer in the caller's table, so that
 the indirection which already existed lands somewhere else. The old value is
 handed back to you, and you call through it.
 
@@ -114,24 +121,31 @@ if (sscanf(line, "%*x-%*x %*4s %*x %lx:%lx %llu %n",
 }
 ```
 
-and matches the mapping whose path ends in `/libc.so`, then builds the pair with
+and matches the mapping whose path ends in `/libandroid_runtime.so`, then builds
+the pair with
 `makedev()`. This is the only place the kernel publishes that pairing, so parsing
 `/proc/self/maps` is not a hack here — it is the intended route to the argument
 the API asks for.
 
 ### Where in the lifecycle
 
-The Lab 4 module does `findLibc()`, `pltHookRegister()` and `pltHookCommit()` all
-inside `preAppSpecialize`, and nowhere else.
+The Lab 4 module does `findTargetLib()`, `pltHookRegister()` and
+`pltHookCommit()` all inside `preAppSpecialize`, and nowhere else.
 
-:::note[An inference, not a documented rule]
+:::note[Measured on the rig, but still not a documented rule]
 The header states no lifecycle restriction on `pltHookRegister` or
 `pltHookCommit`. Contrast `exemptFd`, where the comment says plainly that the API
 "only make sense in preAppSpecialize", and `getModuleDir`, which carries a similar
-restriction. For the PLT hooking pair there is no such sentence. Committing in
-`preAppSpecialize` is a considered choice, inferred from the header's own worked
-example and from the facts below — not a rule copied out of a comment. If you
-have a reason to commit later, the header does not forbid it.
+restriction. For the PLT hooking pair there is no such sentence.
+
+Lab 4 settled the practical question. On the reference rig — Pixel 6 Pro,
+Android 16, arm64, KernelSU-Next 3.3.0, Zygisk Next 1.4.5 — a correct
+registration committed in `preAppSpecialize` returns `true` and the hook fires.
+Committing from `postAppSpecialize` was also tried, and it is not the thing that
+makes a bad registration succeed: with the wrong target, the commit returned
+`false` from both callbacks. So `preAppSpecialize` works, and the reasoning below
+stands. What remains undocumented is the *rule*: the header still does not say
+this is required or guaranteed, and one rig is not a specification.
 :::
 
 The reasoning behind the choice is worth having, because you will make the same
@@ -151,50 +165,88 @@ call for other libraries:
 
 ## Choosing what to hook
 
-Two questions, in this order: which library imports the symbol, and is the symbol
-actually reached.
+Two questions, in this order: which library **imports** the symbol, and is that
+import actually reached at runtime.
 
 The library question is the one people get wrong, because they think of a hook as
-attaching to a function. It does not. It attaches to a *caller's* table. If you
-want to see every call to `openat` in the process, you need every importing ELF
-patched — which is what registering against `libc.so`'s identity gets you in a
-Zygisk implementation that walks the process's mappings for you. If you want to
-see only `libfoo.so`'s calls, you target `libfoo.so`.
+attaching to a function. It does not. It attaches to a *caller's* table. The
+library that **defines** a symbol is exactly the wrong place to look: a defining
+library has no import to rewrite. You are looking for an ELF with an `UND`
+reference and a relocation for that symbol — a caller.
 
-The symbol question is the one that saves the afternoon. Before hooking anything,
-confirm the symbol is imported by something in the process at all:
-
-```bash
-adb shell su -M -c "grep -c 'libc.so' /proc/<pid>/maps"
-```
-
-and, on the host, against the library you plan to hook:
+Answer it before you write any code, with `llvm-readelf` against the library
+itself, pulled from the device:
 
 ```bash
-llvm-readelf --dyn-syms libfoo.so | grep openat
+adb pull /system/lib64/libandroid_runtime.so .
+llvm-readelf -r libandroid_runtime.so | grep ' open$'
 ```
 
-An `UND` entry means the library imports it — there is a PLT/GOT slot to rewrite.
-No entry means there is nothing to hook there, and no amount of debugging the
-hook will change that.
+A relocation naming the symbol means there is a slot to rewrite. No line means
+there is nothing to hook in that ELF, and no amount of debugging the hook will
+change that. `llvm-readelf --dyn-syms <lib> | grep <symbol>` answers the same
+question from the symbol table side; an `UND` entry is the import, a defined
+entry is the definition and is not a hook target.
 
-### Why the module hooks `openat`
+### The mistake this chapter made
 
-Lab 4's module hooks `openat`, and the choice is deliberate on two axes.
+The earlier edition of this chapter, and the earlier Lab 4 module, hooked
+`openat` and registered it against **`libc.so`**. The argument was coverage:
+bionic implements `open()` as a call to `openat()` with `AT_FDCWD`, and nearly
+every file-opening API on Android bottoms out at `openat`, so hooking that one
+symbol was supposed to observe file opens app-wide.
 
-**Coverage.** Bionic implements the plain `open()` libc wrapper as a call to
-`openat()` with `AT_FDCWD`. So does effectively everything above it: `fopen()`,
-the classloader reading a dex or jar, SQLite opening a database file, a resource
-lookup. Nearly every file open on Android funnels through this one symbol.
-Hooking `open()` instead would see only the call sites that literally wrote
-`open()` — a small and arbitrary subset.
+It cannot work, and it fails twice over.
 
-**Cost and safety.** `openat` is a thin syscall wrapper. The replacement does a
+**`libc.so` is the defining library.** libc *defines* `openat`; it does not
+import it. There is no PLT entry in libc for a symbol libc itself provides, so
+the registration matched nothing. On the rig, every armed process logged:
+
+```text
+preAppSpecialize: ARMED, but pltHookCommit() FAILED - openat() is NOT hooked in this process
+```
+
+**The `open()` → `openat()` step is internal to libc.** That is the deeper
+error, and this chapter had already stated the rule that forbids it. "What a PLT
+hook cannot reach", below, says that a call from a library into its own function
+never crosses a PLT. Bionic's `open()` calling `openat()` is precisely that call.
+Even hooking `openat` in some *other* ELF would not have caught the traffic the
+argument promised, because that traffic never leaves libc.
+
+Nor is `openat` rescued by picking a different ELF. Measured with
+`llvm-readelf -r` on libraries pulled from the rig: `libandroid_runtime.so`,
+`libutils.so` and `libbase.so` carry **zero** relocations for `openat`. Only
+`libc++.so` has one; hooking that committed successfully and intercepted nothing
+during an ordinary app launch, because the path is not exercised there.
+
+The lifecycle was never the problem either. Committing in `postAppSpecialize`
+was tried with a real registration and also returned `false`. What distinguished
+"the API is broken" from "nothing matched" was committing an *empty*
+registration list, which returned `true`.
+
+### What the module hooks now
+
+`open`, registered against **`libandroid_runtime.so`**. Three properties make
+that the right target:
+
+- **It imports the symbol.** One relocation for `open`, confirmed with
+  `llvm-readelf -r`. (`libbase.so` has one too, if you want a second importer.)
+- **Every app process loads it.** It is part of the framework every zygote-forked
+  app maps, so it is present at `preAppSpecialize` with nothing to wait for.
+- **It exercises the symbol during startup.** It opens the app's APK and its
+  splits, so the hook has real traffic to intercept on a cold launch rather than
+  a slot that is technically correct andsilent.
+
+The trade is honest: this is *not* app-wide file-open coverage. It is
+`libandroid_runtime.so`'s calls to `open`, and nothing else. The earlier
+edition's claim of app-wide coverage was not achievable by a PLT hook at all —
+not with a better target, not with better timing. If you want breadth, you patch
+more importers; you do not find one magic symbol.
+
+**Cost and safety.** `open` is a thin syscall wrapper. The replacement does a
 bounded amount of work and then tail-calls the original, so the overhead per call
 is small and predictable. Compare a hook on something that does real work, where
-your instrumentation competes with the function itself. `access()` and `stat()`
-were the other candidates in the same family; they are called far more
-selectively and do not give the same coverage.
+your instrumentation competes with the function itself.
 
 ## Writing a trampoline that is safe on the caller's thread
 
@@ -206,7 +258,7 @@ disciplines follow.
 whole ethic of an observing hook:
 
 ```cpp
-    return orig_openat(fd, path, flags, mode);
+    return orig_open(path, flags, mode);
 ```
 
 Same arguments, result returned unmodified. An observer that quietly alters an
@@ -216,7 +268,7 @@ will present as an app failure with no visible connection to your module.
 **Handle re-entrancy.** Your logging path must not call the function you hooked.
 If it does, one intercepted call becomes unbounded recursion and the process dies
 in a way that looks nothing like a logging bug. On current Android
-`__android_log_print` reaches `logd` over a socket rather than through `openat`,
+`__android_log_print` reaches `logd` over a socket rather than through `open`,
 so in practice this particular pair does not recurse — but that is an
 implementation detail of today's logging backend, not a guarantee. The module
 makes the failure mode structurally impossible instead of relying on it:
@@ -236,7 +288,7 @@ before the hook can possibly fire — rather than a pointer into a JNI string wh
 lifetime and `JNIEnv` the hook would then have to reason about. That ordering is
 the point: everything the hook body reads is finalised before the hook goes live.
 
-**Bound your output.** An app can call `openat` hundreds of times a second during
+**Bound your output.** An app can call `open` hundreds of times a second during
 startup. The module caps logging at 20 calls per process and prints one
 `further calls suppressed` line at the cap, so the cutoff is visible rather than
 looking like the hook stopped working. Calls past the cap still run and still call
@@ -258,16 +310,36 @@ pointer is still null. The module logs both outcomes explicitly:
 ```cpp
         bool committed = api->pltHookCommit();
         if (committed) {
-            LOGI("preAppSpecialize: pid=%d proc=%s ARMED, openat() hook committed",
+            LOGI("preAppSpecialize: pid=%d proc=%s ARMED, open() hook committed",
                  getpid(), armedProcessName);
         } else {
             LOGW("preAppSpecialize: pid=%d proc=%s ARMED, but pltHookCommit() "
-                 "FAILED - openat() is NOT hooked in this process", getpid(),
+                 "FAILED - open() is NOT hooked in this process", getpid(),
                  armedProcessName);
         }
 ```
 
 Do this in every module you write. It converts a silent mystery into one line.
+Rewriting Lab 4 turned entirely on that one line: without it the wrong target
+would have presented as an app that simply never opens files.
+
+### What `false` actually means
+
+The header says only that `pltHookCommit` returns `false` "if an error occurred".
+Measured on the rig, the signal is more specific and more useful than that:
+
+| Registration list | `pltHookCommit()` |
+| --- | --- |
+| Empty | `true` |
+| Symbol not imported by the targeted ELF | `false` |
+| Symbol imported and patched | `true` |
+
+So `false` does not mean "the API is broken". It means **nothing you asked for
+could be applied** — the targeted ELF had no PLT entry for that symbol. That is a
+genuine diagnostic, and it points straight at the target rather than at the
+mechanism. It is also undocumented: the header describes none of this, and it is
+observed on one rig with one provider version, so treat it as a strong hint
+rather than a contract.
 
 ## What a PLT hook cannot reach
 
@@ -279,6 +351,8 @@ false and expensively so.
 libc function, that call does not go through a PLT — the symbol is local, the
 linker resolved it at build time or via a direct branch. You are hooking the
 *importer's* table, so calls that never leave the defining library are invisible.
+This is not a hypothetical: bionic's `open()` → `openat()` is exactly this call,
+and assuming otherwise is what broke the earlier edition of this chapter.
 
 **Inlined code.** If a function was inlined into its caller, or the compiler
 replaced a call with the syscall instruction directly, there is no table entry at
@@ -287,7 +361,7 @@ copy of a function calls that copy, not yours.
 
 **Direct syscalls.** Code that issues `svc #0` itself — some anti-tamper layers do
 exactly this, and so do some runtimes — bypasses libc entirely. A PLT hook on
-`openat` cannot see a raw syscall, by construction.
+`open` cannot see a raw syscall, by construction.
 
 **Calls before your commit.** Anything that ran before `pltHookCommit()` returned
 went through the original pointer. This is why the module commits as early as it
@@ -333,8 +407,12 @@ correct; make it knowingly rather than by accident.
 
 There is no clean answer here. Every option is a compromise between coverage,
 complexity, and how much you are willing to run on someone else's thread. Lab 4
-sidesteps it entirely by targeting libc, which is mapped before your module
-exists — which is another reason it is the right first hook.
+sidesteps it entirely by targeting `libandroid_runtime.so`, which practically
+every app process has mapped before your module runs — 125 of the 126 app-uid
+processes running on the reference rig had it mapped when this was checked —
+which is another reason it is the right first hook. Note the "practically":
+one process in that sample did not have it, so if you are hooking a specific
+process, confirm rather than assume.
 
 ## Debugging a hook that never fires
 
@@ -352,18 +430,27 @@ deployment or loader problem, not a hooking problem. Go back to
 over a mapped file, no reboot after deploy, wrong ABI file name.
 
 **3. Did `pltHookCommit()` return true?** You logged it, so read it. `false`
-means the hook was never installed and every question below is moot. Check that
-`findLibc()` succeeded first — the module logs that separately.
+means the hook was never installed and every question below is moot — and, per
+the table above, it means specifically that the ELF you targeted has no PLT entry
+for that symbol. Go to step 4. Check that `findTargetLib()` succeeded first — the
+module logs that separately.
 
-**4. Is `orig_openat` non-null?** A null original after a successful commit means
-the symbol was registered but no matching import was found. That points at the
-symbol name or the target library, not at the hook mechanism.
+**4. Does the target ELF actually import the symbol?** This is the step Lab 4
+was rewritten around. Pull the library off the device and ask:
 
-**5. Is the symbol actually imported by the ELF you targeted?** Run
-`llvm-readelf --dyn-syms` against it and look for an `UND` entry. If the call is
-internal to the defining library, statically linked, inlined, or a raw syscall,
-there is no slot and there never was. This is the step where an empty log turns
-out to be correct behaviour.
+```bash
+llvm-readelf -r libandroid_runtime.so | grep ' open$'
+```
+
+No relocation means there is no slot and there never was one. The most common
+version of this error is registering against the library that *defines* the
+symbol — `libc.so` for anything in libc — which can never work. Find an importer
+instead, or accept that this symbol is not PLT-hookable in this process.
+
+**5. Is `orig_open` non-null?** A null original after a successful commit means
+the commit had nothing to do. If the call you care about is internal to the
+defining library, statically linked, inlined, or a raw syscall, there is no slot.
+This is the step where an empty log turns out to be correct behaviour.
 
 **6. Is the call happening before your commit?** Instrument the other direction:
 log a timestamp at commit and compare with when the app does the work you expected
@@ -374,7 +461,7 @@ protection layer, may have written the slot after you. Disable other modules and
 retest before drawing conclusions.
 
 If you reach the end of that list with `committed=true`, a non-null original, a
-confirmed `UND` import, and still no calls — believe the log. The most likely
+confirmed relocation for the symbol in the ELF you targeted, and still no calls — believe the log. The most likely
 answer at that point is that the code path you assumed exists does not run in this
 app.
 

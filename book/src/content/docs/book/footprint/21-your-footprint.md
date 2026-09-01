@@ -70,7 +70,7 @@ gave the correctness reason for that flag — accidental interposition — and n
 the second reason without pursuing it. Here it is pursued. An exported symbol
 table is readable by anything in the process, without root and without cleverness,
 by walking the linker's list of loaded objects and following each one's
-`DT_SYMTAB`. A module that leaks a symbol called `hook_openat` has published its
+`DT_SYMTAB`. A module that leaks a symbol called `hook_open` has published its
 intent in a form that requires no reverse engineering to read.
 
 The same argument applies to string constants, which no visibility flag touches.
@@ -116,9 +116,9 @@ over when you run; creating one costs you an entry in a directory the app can li
 
 **Hooks.** This is the trace that survives everything else, and the reason
 `DLCLOSE_MODULE_LIBRARY` is not a footprint solution. Module 04 commits a PLT
-hook on `openat`. What that means physically is that a GOT slot in one mapped ELF
-now holds an address that does not fall inside the library the symbol resolves
-from. A process can walk its own loaded objects, read each relocation, and compare
+hook on `open`, in `libandroid_runtime.so`. What that means physically is that a
+GOT slot in that one mapped ELF now holds an address that does not fall inside
+the library the symbol resolves from. A process can walk its own loaded objects, read each relocation, and compare
 the stored address against the range where the defining library is mapped. A
 mismatch is not evidence of a hook in general — lazy binding, `LD_PRELOAD`-style
 interposition and legitimate instrumentation all produce them — but a slot

@@ -3,7 +3,7 @@ title: "Lab 4: Hooking native symbols"
 description: "Hook a libc call in one target app, log it, and show a correct non-hooked control process."
 sidebar:
   order: 4
-status: unverified
+status: proven
 ---
 
 **Chapter:** 14
@@ -12,6 +12,12 @@ status: unverified
 ## Deliverable
 
 Hook a libc call in one target app, log it, and show a correct non-hooked control process.
+
+The module hooks `open` and registers it against `libandroid_runtime.so`. If you
+read an earlier edition, it hooked `openat` against `libc.so`; that could not
+work and this lab is what proved it. Chapter 14's
+["The mistake this chapter made"](/ZygiskLab/book/postspecialize/14-hooking-native-symbols/#the-mistake-this-chapter-made)
+has the reasoning — read it before Part A.
 
 ## Prerequisites
 
@@ -30,12 +36,29 @@ Reference rig: Pixel 6 Pro, Android 16, arm64, KernelSU-Next 3.3.0, Zygisk Next 
 ### Part A - read, build, arm
 
 1. **Read `jni/main.cpp` before you build it.** Find five things and be able to
-   say why each is where it is: `findLibc()` matching on `(dev, inode)` rather
-   than on a path; `strncpy` into `armedProcessName` happening *before*
+   say why each is where it is: `findTargetLib()` matching on `(dev, inode)`
+   rather than on a path, and matching `/libandroid_runtime.so` rather than
+   `/libc.so`; `strncpy` into `armedProcessName` happening *before*
    `pltHookCommit()`; the `bool committed` result being logged in both
    directions; the `thread_local int reentryDepth` guard around the `LOGI`
-   calls; and the final `return orig_openat(fd, path, flags, mode);` passing
+   calls; and the final `return orig_open(path, flags, mode);` passing
    every argument through untouched. Chapter 14 argues each one.
+
+   Read the source comment above `my_open` too. It states why `openat` against
+   `libc.so` cannot be hooked at all — libc defines the symbol rather than
+   importing it — which is the single most useful thing in this lab.
+
+   **Check the target yourself.** Before trusting the module's choice, confirm
+   the import exists:
+
+   ```bash
+   adb pull /system/lib64/libandroid_runtime.so .
+   llvm-readelf -r libandroid_runtime.so | grep ' open$'
+   llvm-readelf -r libandroid_runtime.so | grep ' openat$'
+   ```
+
+   One relocation for `open`, none for `openat`. That two-line check is the
+   whole of what the earlier edition skipped.
 
 2. **Build.**
 
@@ -58,7 +81,7 @@ Reference rig: Pixel 6 Pro, Android 16, arm64, KernelSU-Next 3.3.0, Zygisk Next 
    ```
 
    If the file is missing, empty, unreadable or matches nothing, the module arms
-   for nothing and never touches `openat()` anywhere. It fails closed.
+   for nothing and never touches `open()` anywhere. It fails closed.
 
 5. **Check the label on `target.txt`** against `module.prop`, which the manager
    wrote in place. A mismatch shows up later as
@@ -96,24 +119,29 @@ Reference rig: Pixel 6 Pro, Android 16, arm64, KernelSU-Next 3.3.0, Zygisk Next 
    of these two, and which one you got decides everything after it:
 
    ```text
-   preAppSpecialize: pid=... proc=... ARMED, openat() hook committed
-   preAppSpecialize: pid=... proc=... ARMED, but pltHookCommit() FAILED - openat() is NOT hooked in this process
+   preAppSpecialize: pid=... proc=... ARMED, open() hook committed
+   preAppSpecialize: pid=... proc=... ARMED, but pltHookCommit() FAILED - open() is NOT hooked in this process
    ```
 
-   A third possibility is `could not locate libc.so in /proc/self/maps`, in
-   which case neither `pltHookRegister` nor `pltHookCommit` was called at all.
+   A third possibility is
+   `could not locate libandroid_runtime.so in /proc/self/maps`, in which case
+   neither `pltHookRegister` nor `pltHookCommit` was called at all.
 
-9. **Then read the hook lines.** Expect `openat:` lines carrying the pid, the
+   If you get the `FAILED` variant, it means the ELF you targeted has no PLT
+   entry for the symbol — go back to step 1b, not to the lifecycle.
+
+9. **Then read the hook lines.** Expect `open:` lines carrying the pid, the
    armed process name, a path and the flags, numbered against the cap — and,
    once the app has done any real work, a single line saying further calls are
-   suppressed. The paths should look like an app opening its own files: dex,
-   shared prefs, assets, databases. If they look like something else entirely,
-   confirm the pid on the `openat:` lines matches the pid on the arming line.
+   suppressed. The first paths on a cold launch are the app's own APK and its
+   splits under `/data/app/`, because that is what `libandroid_runtime.so`
+   opens during startup. If they look like something else entirely, confirm the
+   pid on the `open:` lines matches the pid on the arming line.
 
 10. **Confirm the cap behaved.** Count them:
 
     ```bash
-    adb logcat -d -s ZygiskLab | grep -c 'openat: pid='
+    adb logcat -d -s ZygiskLab | grep -c 'open: pid='
     adb logcat -d -s ZygiskLab | grep 'further calls suppressed'
     ```
 
@@ -143,7 +171,7 @@ This is the deliverable, not an appendix to it.
     preAppSpecialize: pid=... nice_name=<control> not armed (target=<target>), no hook installed
     ```
 
-    No `openat:` lines. No `postAppSpecialize` line either — as in Lab 3,
+    No `open:` lines. No `postAppSpecialize` line either — as in Lab 3,
     `setOption(DLCLOSE_MODULE_LIBRARY)` unloads the library before that
     callback would run. On this path `pltHookRegister` and `pltHookCommit` are
     never called.
@@ -152,7 +180,7 @@ This is the deliverable, not an appendix to it.
     hooked-looking carries it:
 
     ```bash
-    adb logcat -d -s ZygiskLab | grep 'openat:' | grep -o 'pid=[0-9]*' | sort -u
+    adb logcat -d -s ZygiskLab | grep 'open:' | grep -o 'pid=[0-9]*' | sort -u
     ```
 
     Every pid in that output must be the target's. One control pid appearing
@@ -165,9 +193,38 @@ This is the deliverable, not an appendix to it.
 
 16. **Retarget, to prove the scope moves.** Point `target.txt` at what was your
     control, restore the label, reboot, and rerun Parts B and C with the two
-    apps swapped. The `openat:` lines should follow the configuration. This is
+    apps swapped. The `open:` lines should follow the configuration. This is
     the cleanest evidence that the scoping is real and not a coincidence of
     which app you happened to launch first.
+
+## Verified result
+
+Run on the reference rig — Pixel 6 Pro, Android 16, arm64, KernelSU-Next 3.3.0,
+Zygisk Next 1.4.5 — with `com.google.android.deskclock` as the target. One
+device, one provider version; these are observed lines, not a specification.
+
+Armed process, cold launch:
+
+```text
+preAppSpecialize: pid=3763 proc=com.google.android.deskclock ARMED, open() hook committed
+open: pid=3763 proc=com.google.android.deskclock path=/data/app/~~uUs7tT7uUtccf4foUMb4mw==/com.google.android.deskclock-tNvvC8JOu_Q4svF-dzAusA==/base.apk flags=0x80000 [1/20 logged]
+open: pid=3763 proc=com.google.android.deskclock path=/data/app/~~uUs7tT7uUtccf4foUMb4mw==/com.google.android.deskclock-tNvvC8JOu_Q4svF-dzAusA==/split_config.xxxhdpi.apk flags=0x80000 [2/20 logged]
+```
+
+Negative control, an unarmed app launched with the same logcat running:
+
+```text
+not armed (target=com.google.android.deskclock), no hook installed
+```
+
+and zero `open:` lines for that process.
+
+For contrast, this is what the earlier `openat`-against-`libc.so` module produced
+in every armed process, which is why the module was rewritten:
+
+```text
+preAppSpecialize: ARMED, but pltHookCommit() FAILED - openat() is NOT hooked in this process
+```
 
 ## Self-check
 
@@ -177,18 +234,18 @@ to skip.
 
 **Did it hook?**
 
-1. **Did you see `ARMED, openat() hook committed`?** Not `ARMED` alone — the
+1. **Did you see `ARMED, open() hook committed`?** Not `ARMED` alone — the
    commit result is a separate fact and the module logs it separately. If you
-   saw the `FAILED` variant, `openat()` is not hooked and nothing below applies;
+   saw the `FAILED` variant, `open()` is not hooked and nothing below applies;
    go to Chapter 14's decision tree at step 3.
 
-2. **Did `openat:` lines appear with the target's pid?** Matching pids are what
+2. **Did `open:` lines appear with the target's pid?** Matching pids are what
    connect the hook lines to the arming line. Lines with a pid you cannot
    account for mean you are reading a different process's output.
 
 3. **Did the suppression line appear after twenty logged calls?** If it did, the
    cap and the atomic counter are working. If you got more than twenty
-   `openat:` lines, something is wrong with your build.
+   `open:` lines, something is wrong with your build.
 
 4. **Did the app behave normally?** The hook returns the original's result
    unchanged. A target that misbehaves only with the module installed means your
@@ -200,7 +257,7 @@ to skip.
    `not armed` line?** Two lines, or a `postAppSpecialize` line, means the
    unload did not happen where you expected.
 
-6. **Is the set of pids on `openat:` lines exactly `{target}`?** You checked
+6. **Is the set of pids on `open:` lines exactly `{target}`?** You checked
    this mechanically in step 14. Say the number out loud: how many distinct pids
    were there.
 
@@ -208,7 +265,7 @@ to skip.
    less than a busy one. If your only control was a small app, you have not
    really tested for leakage.
 
-8. **Did retargeting move the hook?** If `openat:` lines followed `target.txt`
+8. **Did retargeting move the hook?** If `open:` lines followed `target.txt`
    to the other app and the first app went silent, the scoping is
    configuration-driven and demonstrated. If they did not move, you are looking at something
    other than what you think.

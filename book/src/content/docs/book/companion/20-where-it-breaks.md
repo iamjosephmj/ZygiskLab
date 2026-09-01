@@ -311,11 +311,13 @@ this process only, and two injected apps share your `.so` on disk and nothing
 else ([Chapter 5](/ZygiskLab/book/load/05-anatomy-of-a-module/)).
 
 **Assume a PLT hook sees calls internal to a library.** Looks right because you
-hooked `openat` and the library opens files. Defeated by the PLT only mediating
-*imports*: a call from a library to its own function, an inlined call, a
-statically linked copy, or a raw syscall never touches a PLT stub and your hook
-never fires. You have intercepted an interface, not a behaviour
-([Chapter 14](/ZygiskLab/book/postspecialize/14-hooking-native-symbols/)).
+hooked a file-opening symbol and the library opens files. Defeated by the PLT
+only mediating *imports*: a call from a library to its own function, an inlined
+call, a statically linked copy, or a raw syscall never touches a PLT stub and
+your hook never fires. You have intercepted an interface, not a behaviour. This
+book walked into it: the earlier Lab 4 hooked `openat` on the argument that
+bionic's `open()` calls it, when that call is internal to libc and crosses no
+PLT ([Chapter 14](/ZygiskLab/book/postspecialize/14-hooking-native-symbols/)).
 
 **Assume `setOption` reports failure.** Looks right because a function that
 configures something ought to tell you whether it configured it. Defeated by the

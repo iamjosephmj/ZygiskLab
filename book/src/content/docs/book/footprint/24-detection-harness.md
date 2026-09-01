@@ -255,7 +255,7 @@ check in the suite — the only one that tests an invariant rather than a name �
 reporting, on a perfectly healthy device, that it could not evaluate the thing
 it exists to evaluate. Had `Check` returned a boolean, this class would have
 returned `false`. `false` renders as "no GOT tampering detected". You would have
-armed module 04, whose entire purpose is a committed PLT hook on `openat`, read
+armed module 04, whose entire purpose is a committed PLT hook on `open`, read
 "no GOT tampering detected", and concluded your hook was invisible. It is not
 invisible; it was never looked for. A confident wrong answer, produced by the
 one check most likely to be believed.
@@ -339,13 +339,14 @@ demonstration in the lab of a decision producing or not producing a trace. Its
 prediction for `OpenFdCheck` is nothing: a window, not a standing entry. If the
 harness disagrees, that is a finding worth the whole lab.
 
-**Module 04, `zygisklab_plthook`.** A committed PLT hook on `openat`, plus a
+**Module 04, `zygisklab_plthook`.** A committed PLT hook on `open` in
+`libandroid_runtime.so`, plus a
 resident library on the armed path. Maps and libraries should fire as with 01.
 The hook itself should not, and this is now the interesting case, because the
 check aimed at it is present and still cannot see it. `GotIntegrityCheck` runs,
 parses maps, confirms `libc.so` comes from the Runtime APEX — and stops there,
-because resolving the `openat` slot needs the native access the app does not
-have. Your hook rewrites exactly the kind of slot the check is named after, and
+because resolving the `open` slot in `libandroid_runtime.so` needs the native
+access the app does not have. Your hook rewrites exactly the kind of slot the check is named after, and
 the check's own evidence will tell you it never read one. Record module 04's hook
 as **unmeasured**, with the `COULD_NOT_RUN` row as your citation for why. This
 is the same gap Chapter 21 named as the trace that survives everything else; the

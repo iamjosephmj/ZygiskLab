@@ -185,7 +185,7 @@ Running the harness is the easy half. You have finished this lab when:
   none of them is written up as a clean result.
 - You can name which of your own modules' traces this harness genuinely cannot
   see, and separate them from the traces it looked for and did not find. At
-  minimum: module 04's `openat` PLT hook (no slot resolution), module 05's JNI
+  minimum: module 04's `open` PLT hook (no slot resolution), module 05's JNI
   method replacement (no entry-point comparison), any module-spawned thread with
   an unremarkable name (`ThreadsCheck` reports but does not classify), and every
   behavioural or timing trace (nothing here times anything). Saying "the harness

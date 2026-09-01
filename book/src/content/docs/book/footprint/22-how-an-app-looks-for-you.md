@@ -156,7 +156,8 @@ existing indirection lands elsewhere. That is a data change in the app's own
 address space, and the app can read it back: walk the library's relocation
 entries to find the slot for an imported symbol, read the address in it, and
 determine which mapping that address falls into via `maps` or `dl_iterate_phdr`.
-If the slot for `openat` does not point into the library defining `openat`,
+If `libandroid_runtime.so`'s slot for `open` does not point into the library
+defining `open`,
 something rewrote it. The app need not know what the hook is or who installed it,
 only that the pointer left the neighbourhood it belongs in.
 
@@ -254,7 +255,7 @@ read-only directories are writable, or whether a root-helper name resolves on
 `PATH`; both carry the same namespace caveats.
 
 **Cost.** Very low per path; the total is the length of the list. Hundreds of
-`stat` calls are fast, though visible to anything hooking `openat` or `stat` — a
+`stat` calls are fast, though visible to anything hooking `open` or `stat` — a
 mildly amusing symmetry.
 
 **Catches.** Devices where the relevant paths are visible to the app: nobody
