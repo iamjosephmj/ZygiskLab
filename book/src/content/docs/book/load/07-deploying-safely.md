@@ -3,7 +3,7 @@ title: "Deploying without bricking zygote"
 description: "Lab 2: why cp over a mapped .so corrupts zygote, the md5sum diagnostic, and the atomic mv-based safe deploy."
 sidebar:
   order: 3
-status: unverified
+status: proven
 ---
 
 The most expensive bug in this book is not in any module's source. It is in the
@@ -67,7 +67,14 @@ The device stays up. The launcher is fine. Settings opens. Then you launch the
 app your module is scoped to, and it dies instantly — SIGSEGV during app
 specialization, with the fault surfacing inside the provider's library rather
 than inside your own. Every subsequent launch of that app dies the same way.
-Apps your module is not enabled for keep working.
+Apps your module is not enabled for should keep working, because your code
+returns before it touches the damaged pages.
+
+That last sentence is reasoning, not a measurement. The captured instance below
+used a module with no arming at all, so it says nothing about the unarmed case;
+what was observed is that a corrupted mapping kills specialization, not that a
+process your module ignores survives it. Verify the asymmetry yourself before
+you rely on it as a diagnostic.
 
 Read that asymmetry again, because it is the whole trap. The crash is
 *selective*, and it selects exactly the set of apps you were working on. Three
@@ -89,6 +96,50 @@ library, not in yours, so the natural move is to reinstall or downgrade Zygisk
 Next. That changes nothing, because the provider is only the messenger: it is
 the code that dlopens you, calls into you, and touches your mapping, so it is
 where the damaged pages get executed from.
+
+### A captured instance
+
+This signature was reproduced deliberately on the reference rig — Pixel 6 Pro,
+Android 16, arm64, KernelSU-Next 3.3.0, Zygisk Next 1.4.5 — by writing a second
+build over the live `.so` with `cp` while zygote had it mapped. App spawns
+started dying immediately, with `Zygote  : Process 8716 exited due to signal 11
+(Segmentation fault)` in logcat and a tombstone for each. The tombstone header:
+
+```text
+Executable: /system/bin/app_process64
+Cmdline: zygote64
+pid: 8716, tid: 8716, name: main  >>> zygote64 <<<
+uid: 0
+esr: 0000000082000006 (Instruction Abort Exception 0x20)
+signal 11 (SIGSEGV), code 1 (SEGV_MAPERR), fault addr 0x000000000002f53c (read)
+    x17 0000002b2b678fa8
+    pc  000000000002f53c
+```
+
+Read what that header tells you. The dying process is a freshly forked
+`zygote64` child, still `uid: 0` — it died during specialization, before it
+became the app; the Java frames confirm it, running
+`Zygote.specializeAppProcess` from `Zygote.childMain` from `Zygote.forkSimpleApps`.
+The fault is an *Instruction Abort*, not a data access: the process jumped to
+`0x2f53c` and there is no executable mapping there. That is what a stale
+mapping into a rewritten inode looks like from the inside.
+
+The native backtrace is the part that misleads:
+
+```text
+#00 pc 000000000002f53c  <unknown>
+#01 pc 00000000000fb130  /data/adb/modules/zygisksu/lib64/libzygisk.so
+#02 pc 00000000000fb5d0  /data/adb/modules/zygisksu/lib64/libzygisk.so
+#03 pc 00000000000fad18  /data/adb/modules/zygisksu/lib64/libzygisk.so
+#04 pc 0007fc98          /data/adb/modules/zygisksu/lib64/libzygisk.so
+```
+
+Frame #00 is an address in no mapping at all, and every named frame below it
+belongs to the provider. The tombstone also reports
+`Unreadable libraries: /data/adb/modules/zygisksu/lib64/libzygisk.so`. Nothing
+in the trace points at the module that actually caused the crash. This is
+exactly why the failure reads as a provider bug or as an app-side defence
+rather than as your own deploy.
 
 The mechanism behind the selectivity is simple once you see it. Your module's
 callbacks run in every forked process, but a well-behaved module — the one
@@ -124,6 +175,11 @@ Compare the two hashes.
 |---|---|---|
 | Differ | The deploy did not land — wrong path, wrong ABI file name, permission or label failure | Fix the deploy; your code is untested |
 | Match | The file on disk is exactly what you built | The file is fine. The *mapping* is stale. Reboot before you conclude anything about your code |
+
+On the rig, that second row is what came back. Immediately after the `cp`, the
+on-disk hash was `fc02597d052fbe735731a292e510b9c7` — an exact match for the
+freshly built local file — while app spawns were still crashing. A correct file
+and a crashing device at the same time, told apart by one command.
 
 That second row is the one worth internalising. A matching hash means the
 question "is my code broken?" is not yet answerable, because the code on disk
@@ -453,10 +509,14 @@ also why the hash check cannot answer "is my code broken?" on its own — a
 matching hash was exactly the state in which the device was still running the
 previous build.
 
-The corruption half of this chapter has **not** been re-run. The `cp` mechanism
-is drawn from the behaviour of `cp`, `rename` and `mmap`, and the crash
-signature from earlier observation on the rig, but neither the selective crash
-nor the reboot recovery was reproduced for this write-up. Those are the claims
-worth testing yourself — that unarmed apps survive, and that a reboot clears a
-crash whose hashes matched. [Lab 2](/ZygiskLab/labs/lab-02-safe-deploy/) Part B
-has you reproduce both, deliberately, on a device you can afford to lose.
+Part B has now been run too, once, on the same rig. The `cp` over a mapped
+`.so` crashed app spawns immediately with the signature quoted above; the
+on-disk hash matched the local build throughout; and a plain reboot cleared the
+crash completely, after which the module loaded and logged its new string. So
+the file was valid the whole time and only the mapping was damaged, which is
+this chapter's claim end to end. What that run did **not** settle is the
+selectivity: whether an unarmed app survives while an armed one dies was not
+measured, so the asymmetry above remains reasoning, not observation. One
+device, one provider version, one module.
+[Lab 2](/ZygiskLab/labs/lab-02-safe-deploy/) Part B has you reproduce this
+deliberately, on a device you can afford to lose.

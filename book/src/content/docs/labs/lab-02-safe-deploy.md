@@ -3,7 +3,7 @@ title: "Lab 2: Deploying without bricking zygote"
 description: "A deploy.sh that is safe by construction, plus a deliberate reproduction of the corruption so the reader has seen the crash signature once, on a spare device."
 sidebar:
   order: 2
-status: unverified
+status: proven
 ---
 
 **Chapter:** 7
@@ -117,15 +117,14 @@ least one of those from memory.
    Wait for boot, clear the log, launch the app again. Now `build 2` appears.
    You have a deploy path whose failure modes are all loud.
 
-## Verified result — Part A only
+## Verified result
 
 Part A was run on the reference rig: Pixel 6 Pro, Android 16, arm64,
 KernelSU-Next 3.3.0, Zygisk Next 1.4.5. The build strings used were `BUILD-2`
 and `BUILD-3` rather than `build 2` and `build 3`; nothing else differed.
 
-**Part B has not been run.** Everything in the Part B section below remains a
-prediction, including the crash signature, the armed/unarmed asymmetry and the
-recovery. Its spare-device warning stands unchanged and should be read as
+Part B was subsequently run on the same rig, and is recorded at the end of this
+section. Its spare-device warning stands unchanged and should be read as
 written.
 
 ### The mapped-library claim: confirmed
@@ -184,6 +183,72 @@ Chaining `mv` and `chmod` behind a single `su -M -c` produced
 `chmod: Permission denied` immediately after the `mv` succeeded. The identical
 `chmod`, issued seconds later as a separate invocation, worked. The cause was
 not established. `deploy.sh` now runs each step as its own invocation.
+
+### Part B: the corruption, reproduced
+
+Part B was run on the same rig. A working module was installed and confirmed
+running; a second build, whose log string was `CORRUPT-TEST`, was then written
+over the live `.so` with `cp` while zygote had it mapped — the exact mistake
+this lab is built around.
+
+App spawns began dying immediately. Logcat carried
+`Zygote  : Process 8716 exited due to signal 11 (Segmentation fault)` with a
+tombstone written, and six such crash lines accumulated as apps kept being
+launched. The tombstone header:
+
+```text
+Executable: /system/bin/app_process64
+Cmdline: zygote64
+pid: 8716, tid: 8716, name: main  >>> zygote64 <<<
+uid: 0
+esr: 0000000082000006 (Instruction Abort Exception 0x20)
+signal 11 (SIGSEGV), code 1 (SEGV_MAPERR), fault addr 0x000000000002f53c (read)
+    x17 0000002b2b678fa8
+    pc  000000000002f53c
+```
+
+The crashing process is a freshly forked `zygote64` child, still uid 0 — it died
+during specialization, before becoming the app. The Java frames say where:
+`com.android.internal.os.Zygote.specializeAppProcess`, called from
+`Zygote.childMain`, from `Zygote.forkSimpleApps`.
+
+The native backtrace:
+
+```text
+#00 pc 000000000002f53c  <unknown>
+#01 pc 00000000000fb130  /data/adb/modules/zygisksu/lib64/libzygisk.so
+#02 pc 00000000000fb5d0  /data/adb/modules/zygisksu/lib64/libzygisk.so
+#03 pc 00000000000fad18  /data/adb/modules/zygisksu/lib64/libzygisk.so
+#04 pc 0007fc98          /data/adb/modules/zygisksu/lib64/libzygisk.so
+```
+
+Frame #00 is an address in no mapping at all; every named frame belongs to the
+provider, and the tombstone additionally notes
+`Unreadable libraries: /data/adb/modules/zygisksu/lib64/libzygisk.so`. Nothing
+in the trace points at the module that actually caused it. That is step 11,
+observed, and it is precisely why this failure reads as a provider bug or as
+app-side defences rather than as your own deploy.
+
+Step 13 is the one that matters most. Immediately after the `cp`, the on-disk
+hash was `fc02597d052fbe735731a292e510b9c7` — an exact match for the newly built
+local file — while app spawns were crashing. The one-step discriminator behaved
+exactly as this lab and Chapter 7 claim: a matching hash on a crashing device
+means the file is fine and the mapping is stale.
+
+A reboot fully recovered the device: zero crashes afterwards, and the module
+loaded and ran normally, logging its new `CORRUPT-TEST` string. The on-disk file
+was therefore valid throughout and only the running mapping was damaged. No
+recovery mode, no reflash, and `adbd` stayed responsive the whole time, so
+control was never lost.
+
+That recovery is reassuring, and it is also one run. The `:::danger` warning
+above stands as written: this ran on a device whose owner had accepted the risk,
+other devices and other module code can fail worse, and a module that corrupts
+zygote during *boot* — rather than crashing app spawns after boot — is a
+different and worse situation than the one recorded here.
+
+The armed/unarmed asymmetry of step 12 was **not** measured on this run. Take it
+as prediction still.
 
 ### Part B — reproduce the corruption, once
 
