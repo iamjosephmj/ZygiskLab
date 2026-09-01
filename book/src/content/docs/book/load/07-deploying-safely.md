@@ -193,6 +193,16 @@ closely. The deploy "succeeds", the module simply never runs, and you are back
 at the same outcome this whole chapter exists to prevent, arrived at from an
 entirely different direction than a stale mapping.
 
+There is one case where that check refuses and nothing is wrong. Straight after
+a fresh manager install, before the first reboot, `/data/adb/modules/<id>/`
+holds only an `update` marker — on KernelSU-Next 3.3.0 the installer stages the
+extracted module in `/data/adb/modules_update/<id>/` and only swaps it into
+place at boot, as
+[Chapter 3](/ZygiskLab/book/foundations/03-rig-and-toolchain/) describes. So
+`[ -d "$DEST_DIR" ]` is false, `deploy.sh` stops, and it is right to: there is
+no live module directory to deploy into yet. Reboot first, then deploy. Recognise this one by the timing — you have just installed
+and not yet rebooted — rather than going looking for a typo in your `id`.
+
 That distinction is worth holding onto, because it recurs whenever you drive a
 device from a host script: a remote command that fails loudly is still a silent
 failure if nothing on your side is listening. Checking the precondition locally

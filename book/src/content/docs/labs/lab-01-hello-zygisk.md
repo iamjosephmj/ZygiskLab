@@ -3,7 +3,7 @@ title: "Lab 1: Hello, Zygisk"
 description: "A log line from inside a named app's process, with the pid and uid printed, proving you ran inside that app and not zygote."
 sidebar:
   order: 1
-status: unverified
+status: proven
 ---
 
 **Chapter:** 4
@@ -59,6 +59,44 @@ Reference rig: Pixel 6 Pro, Android 16, arm64, KernelSU-Next 3.3.0, Zygisk Next 
 8. **Launch the target app** and read what appears. Expect three lines per launch: `onLoad`, `preAppSpecialize`, `postAppSpecialize`. The pid and uid values on your device will not match anyone else's — a pid is whatever the kernel handed out, and an app's uid is assigned at install time.
 
 9. **Record the three lines.** Copy them somewhere. They are the deliverable, and they are also your baseline: every later lab that goes quiet is diagnosed by asking which of these three lines still appears.
+
+## Verified result
+
+This lab has been run on the reference rig — Pixel 6 Pro, Android 16, arm64,
+KernelSU-Next 3.3.0 (`ksud 3.3.0 (uapi: 2)`), Zygisk Next 1.4.5
+(`version=1.4.5 (836-b13d58a-release)`, versionCode 836). Two independent app
+launches, captured verbatim from `adb logcat -s ZygiskLab`:
+
+```text
+09-01 02:13:16.413  8973  8973 I ZygiskLab: onLoad: module loaded into pid=8973
+09-01 02:13:16.414  8973  8973 I ZygiskLab: preAppSpecialize: pid=8973 getuid=0 (current identity) args->uid=10215 (destination) nice_name=com.google.android.calculator
+09-01 02:13:16.423  8973  8973 I ZygiskLab: postAppSpecialize: pid=8973 getuid=10215
+```
+
+```text
+09-01 02:13:52.373  9203  9203 I ZygiskLab: onLoad: module loaded into pid=9203
+09-01 02:13:52.374  9203  9203 I ZygiskLab: preAppSpecialize: pid=9203 getuid=0 (current identity) args->uid=10144 (destination) nice_name=com.google.android.deskclock
+09-01 02:13:52.381  9203  9203 I ZygiskLab: postAppSpecialize: pid=9203 getuid=10144
+```
+
+Both launches show the shape the self-check asks for: one pid across all three
+lines, `getuid=0` in `preAppSpecialize`, and `getuid` equal to the app's uid in
+`postAppSpecialize`. The uid moved across the boundary, which is the proof —
+and `args->uid` named the destination in advance, in both cases correctly. It
+also makes the design point concrete: a module that logged only `args->uid`
+before and `getuid()` after would have printed 10215 twice, and 10144 twice,
+and demonstrated nothing about whether `postAppSpecialize` ran.
+
+The elapsed time from `preAppSpecialize` to `postAppSpecialize` was about 9ms
+in the first launch and 7ms in the second. Two samples on one device are not a
+benchmark; do not plan around those numbers.
+
+:::note
+This is two launches on one rig, not a general guarantee. Different providers,
+Android versions and devices are not covered by it, and neither is your device.
+Run the lab yourself — the point is not that these lines exist somewhere, it is
+that you can produce and read them on the hardware you will be working on.
+:::
 
 ## Self-check
 

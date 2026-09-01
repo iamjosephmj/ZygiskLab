@@ -3,7 +3,7 @@ title: "Hello, Zygisk"
 description: "Lab 1: a one-file module that logs its pid and uid from inside a named app, packaged, installed, and rebooted into place."
 sidebar:
   order: 4
-status: unverified
+status: proven
 ---
 
 A hello-world module has one job, and it is not to say hello. It is to answer a
@@ -370,6 +370,16 @@ device and different on every launch — a pid is whatever the kernel handed out
 and an app's uid is assigned at install time and differs per device. What you
 are checking is the *shape*: same pid three times, uid moving from 0 to
 non-zero, and the app's own `nice_name`.
+
+That prediction has now been confirmed on the reference rig. Two independent
+app launches produced exactly that shape: one pid across all three lines,
+`getuid=0` before specialization, and `getuid` equal to the `args->uid` the
+pre-specialize line had already named. The captured logcat is recorded in
+[Lab 1's verified result](/ZygiskLab/labs/lab-01-hello-zygisk/). That is two
+samples on one device, so treat it as evidence the module and the reasoning
+behind it are sound, not as a substitute for running it. You still run it
+yourself — the value of this chapter is in reading your own three lines and
+being able to say why the uid moved.
 
 ## Failure catalogue
 
