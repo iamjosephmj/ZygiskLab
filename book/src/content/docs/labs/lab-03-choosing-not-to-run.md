@@ -3,7 +3,7 @@ title: "Lab 3: Choosing not to run"
 description: "A module armed for one package, with a measurement showing the unarmed path's cost on other app launches."
 sidebar:
   order: 3
-status: unverified
+status: proven
 ---
 
 **Chapter:** 11
@@ -186,6 +186,91 @@ The measurement is the heart of this lab, and one sample is not a measurement.
     config makes the module arm for *nothing*. Confirm that direction yourself;
     a module that fails the other way arms for everything, and you want to have
     seen which one this is. Restore the file and reboot when you are done.
+
+## Verified result
+
+This lab was run on the reference rig: Pixel 6 Pro, Android 16, arm64,
+KernelSU-Next 3.3.0, Zygisk Next 1.4.5. The module was `modules/03-armed-once/`,
+installed with `ksud module install`, with `target.txt` containing
+`com.google.android.deskclock`.
+
+### Arming, both directions
+
+```text
+preAppSpecialize: pid=8210 nice_name=com.google.android.deskclock ARMED getuid=0 (current identity) args->uid=10144 (destination)
+postAppSpecialize: pid=8210 nice_name=com.google.android.deskclock getuid=10144
+preAppSpecialize: pid=8404 nice_name=com.google.android.photopicker not armed (target=com.google.android.deskclock), unarmed path cost=190us, dlclose requested
+```
+
+The armed process matched exactly and produced both lines, with `getuid` moving
+from 0 to the destination uid across specialization. Every other process on the
+device took
+the early return and requested `DLCLOSE_MODULE_LIBRARY`, and none of them
+produced a `postAppSpecialize` line. That is the positive result and the
+negative control together.
+
+### Ten unarmed samples
+
+Ten cold launches, in microseconds, sorted:
+
+```text
+126 149 150 179 190 207 216 230 300 507
+```
+
+Median about 198us; range 126-507us. These are **ten samples on one device with
+one provider version**, not a benchmark, and the spread matters as much as the
+median — the 507us outlier was the first launch measured, which is exactly the
+cold-start effect step 10 warns about.
+
+Read the number for what it covers: the module's own callback work — reading
+`nice_name`, `getModuleDir()` plus `openat`/`read`/`close` of `target.txt`, the
+comparison, and `setOption`. It does not cover the provider finding and mapping
+the `.so`, static initialisers, `onLoad`, or anything else the provider does
+around the callback. It is a lower bound on your module's per-launch cost, not
+the injection overhead.
+
+### The `getModuleDir()` label question, settled
+
+Chapter 7 recorded the `getModuleDir` label case as untested after Lab 2. This
+run settles it, with a clean A/B/A on `target.txt`'s SELinux label:
+
+| `target.txt` label | Result |
+|---|---|
+| `u:object_r:system_file:s0` | module armed for deskclock |
+| `u:object_r:adb_data_file:s0` | `not armed (target=(unset))` — the read failed |
+| `u:object_r:system_file:s0` restored | armed again |
+
+The mislabelled run:
+
+```text
+preAppSpecialize: pid=9359 nice_name=com.google.android.deskclock not armed (target=(unset)), unarmed path cost=228us, dlclose requested
+```
+
+With the file mislabelled, the module could not read it through the descriptor
+`getModuleDir()` returned, and fell back to unarmed — silently as far as the
+target was concerned, since the only sign is `(unset)` in a log line. That is
+step 5 of this lab earning its place, and it is why the module fails closed.
+
+The two label findings now fit together: a mislabelled `.so` still loads and
+runs (Lab 2), and a mislabelled file inside the module directory is unreadable
+through `getModuleDir()` — which is exactly and only what the API header claims.
+The label matters for module-directory *access*, not for library *loading*.
+
+:::note
+Labels observed on the live module directory after reboot on this rig:
+`u:object_r:system_file:s0` on `module.prop`, on the `zygisk` directory, and on
+a `target.txt` created inside it, which inherited the directory's type. Working
+modules' `zygisk/*.so` files carry `u:object_r:system_lib_file:s0`.
+
+That differs from what Lab 2 recorded for `module.prop`, and the difference is
+*when* each was looked at rather than a contradiction. `ksud module install`
+creates a stub directory under `/data/adb/modules/<id>/` holding an `update`
+marker and a `module.prop` labelled `u:object_r:adb_data_file:s0`, while the
+real tree waits in `/data/adb/modules_update/<id>/`. At the next boot the staged
+tree becomes the live one, bringing its own `u:object_r:system_file:s0` with it.
+Lab 2 read the stub before rebooting; Lab 3 read the real directory afterwards.
+If you are comparing labels, note which side of a reboot you are standing on.
+:::
 
 ## Self-check
 

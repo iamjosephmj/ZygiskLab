@@ -451,6 +451,16 @@ If the second row produces `ARMED`, you matched the package and called it a
 process. If the first row produces nothing, you have the process name wrong —
 go back to `ps` and read it rather than reasoning about the manifest.
 
+Exact matching on `nice_name` has been exercised on the reference rig — Pixel 6
+Pro, Android 16, arm64, KernelSU-Next 3.3.0, Zygisk Next 1.4.5 — by Lab 3's
+module, armed for a single process name. The exact match armed that process and
+nothing else; every other process launched on the device took the unarmed path.
+That is the negative half of the table above, observed rather than argued. It
+does not relax the rule this section states: what arrives in `nice_name` is
+whatever the process is actually called — an illustrative `com.example.app:remote`
+is a process name, not a package name — so compare it against a process name you
+read off the device, not a package name you assumed.
+
 Remove the `skip` log once you have the evidence. It costs a JNI string read
 and a log write on every launch of the target package, which is exactly the
 overhead Chapter 8 tells you not to leave in.

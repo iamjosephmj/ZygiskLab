@@ -155,8 +155,12 @@ The accurate, narrower statement is that the Zygisk API header requires the
 because of SELinux restrictions on the descriptor `Api::getModuleDir()` hands
 over a socket. That is about directory access through that call, not about
 whether the library loads. Module 01 does not call `getModuleDir()`, so this run
-says nothing about that case; it remains **untested**. Modules 03 and 06 do call
-it, so a later lab can settle it.
+says nothing about that case. [Lab
+3](/ZygiskLab/labs/lab-03-choosing-not-to-run/) has since settled it on this same
+rig: a file inside the module directory carrying `u:object_r:adb_data_file:s0`
+could not be read through the descriptor `getModuleDir()` returns, and reverting
+the label restored the read. So the header's requirement holds for
+module-directory *access*, and only for that; loading is unaffected.
 
 One device, one provider, one version. This disproves a general claim; it does
 not prove that no label ever matters.

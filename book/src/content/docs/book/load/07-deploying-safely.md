@@ -357,13 +357,30 @@ the module directory through that descriptor**, not about whether the library
 loads. This book over-generalised it into a claim about loading. The narrower
 statement is the accurate one.
 
-:::note
-Module 01 never calls `getModuleDir()`, so this run says nothing about the
-`getModuleDir` case. Whether a mislabelled module directory breaks that call
-remains **untested**. Modules 03 and 06 do call it, so a later lab can settle
-it. Until then, treat the header's directory-context requirement as documented
-but unverified here, not as disproven.
-:::
+**The `getModuleDir` case, settled by Lab 3.** Module 01 never calls
+`getModuleDir()`, so the run above said nothing about that half. [Lab
+3](/ZygiskLab/labs/lab-03-choosing-not-to-run/) since tested it directly on the
+same rig, with an A/B/A on the SELinux label of a `target.txt` sitting in the
+module directory and read through the descriptor `getModuleDir()` returns:
+
+| `target.txt` label | Result |
+|---|---|
+| `u:object_r:system_file:s0` | module armed for its target |
+| `u:object_r:adb_data_file:s0` | read failed; module fell back to unarmed |
+| `u:object_r:system_file:s0` restored | armed again |
+
+The header's directory-context requirement is therefore **confirmed**, and the
+complete two-part picture is:
+
+- A mislabelled `.so` still **loads and runs**. The book's old general claim
+  about loading is false.
+- A mislabelled file **inside the module directory is unreadable** through
+  `getModuleDir()`. The module sees a missing config, not an error, so it fails
+  in whichever direction its own logic chooses.
+
+The label matters for module-directory *access*, not for library *loading* —
+which is exactly and only what the API header claims. Both halves are one
+device, one provider, one version.
 
 ### Three labels, all different
 

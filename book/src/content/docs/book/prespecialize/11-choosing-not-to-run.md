@@ -3,7 +3,7 @@ title: "Choosing not to run"
 description: "Lab 3: arming a module for one package only, and measuring the cost the unarmed path imposes on every other launch."
 sidebar:
   order: 4
-status: unverified
+status: proven
 ---
 
 Your module runs in every app on the device. Not the app you care about — every
@@ -311,8 +311,20 @@ one sample a number. Scheduling, page cache state, and whatever the device was
 doing at that moment move it around freely, and the first launch after a reboot is
 not like the tenth.
 
+The magnitude has since been measured once. On the reference rig — Pixel 6 Pro,
+Android 16, arm64, KernelSU-Next 3.3.0, Zygisk Next 1.4.5 — ten cold unarmed
+launches of `modules/03-armed-once/` gave `126 149 150 179 190 207 216 230 300
+507` microseconds: a median of about 198us and a range of 126-507us, with the
+507us sample the first launch measured. That is the figure this chapter's
+argument rests on: the discipline the chapter asks for costs a couple of hundred
+microseconds of the module's own callback work per unarmed app launch on this
+device. It is ten samples on one device with one provider version, and the
+spread is part of the finding — treat it as an order of magnitude, not a
+constant. Lab 3 also confirmed the `dlclose` half: no unarmed process produced a
+`postAppSpecialize` line.
+
 So the honest position at the end of this chapter is that the argument is sound
-and the magnitude is unmeasured. [Lab
+and the magnitude is known only on one rig. [Lab
 3](/ZygiskLab/labs/lab-03-choosing-not-to-run/) is where you get the magnitude,
 on your own rig, across enough launches to see a spread rather than a value — and
 where you prove the negative half of the claim, which is that the module genuinely
