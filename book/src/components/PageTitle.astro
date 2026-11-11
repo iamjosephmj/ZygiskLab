@@ -16,7 +16,7 @@ const label = status === 'proven' ? 'Proven' : 'Unverified';
 
 <h1 id={PAGE_TITLE_ID}>{Astro.locals.starlightRoute.entry.data.title}</h1>
 
-<span class="zl-status" data-status={status}>{label}</span>
+{status === 'proven' && <span class="zl-status" data-status={status}>{label}</span>}
 
 {
   status !== 'proven' && (
