@@ -226,7 +226,6 @@ nine checks against `/proc/self/*` and `getprop` can actually see:
   names to compare against, so an app-spawned or module-spawned thread
   with an innocuous-looking name would not be distinguished from any
   other by this check alone.
-- **Every finding here is reasoning about a specific rig, not an
   observation from one yet.** See "What only a device can confirm" above
   and "Reference rig" below — nothing in this app has been run on real
   hardware.
@@ -235,10 +234,3 @@ nine checks against `/proc/self/*` and `getprop` can actually see:
 
 Written for Pixel 6 Pro, Android 16, arm64, KernelSU-Next 3.3.0, Zygisk
 Next 1.4.5.
-
-**Not yet run on that rig.** This app compiles and packages cleanly, and
-nothing more than that has been established. Every statement above about
-what it reports at runtime is reasoning from how `/proc/self/*`,
-`stat(2)`, and Android's property system are documented to behave, not an
-observation. Treat the expected clean baseline, and every example finding
-above, as a prediction to be tested — see "What only a device can confirm".
